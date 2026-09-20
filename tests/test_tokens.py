@@ -26,6 +26,8 @@ def test_token_signed_with_another_key_is_rejected() -> None:
         "a-different-key-that-is-long-enough-for-hs256",
         algorithm="HS256",
     )
+    with pytest.raises(jwt.InvalidSignatureError):
+        decode_access_token(forged)
 
 
 def test_garbage_is_rejected() -> None:
