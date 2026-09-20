@@ -17,4 +17,3 @@ def test_correct_password_verifies() -> None:
 def test_wrong_password_is_rejected() -> None:
     hashed = hash_password("secret123")
     assert verify_password("not-the-password", hashed) is False
-
