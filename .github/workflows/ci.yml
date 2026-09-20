@@ -11,6 +11,7 @@ jobs:
       ENVIRONMENT: ci
       DATABASE_URL: postgresql+asyncpg://stockpilot:stockpilot@localhost:5432/stockpilot
       REDIS_URL: redis://localhost:6379/0
+      JWT_SECRET_KEY: ci-test-secret-key-that-is-long-enough-for-hs256
     steps:
       - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v7
