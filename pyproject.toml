@@ -15,9 +15,16 @@ dependencies = [
 [dependency-groups]
 dev = [
     "httpx>=0.28.1",
+    "ipykernel>=7.3.0",
+    "jupyterlab>=4.6.3",
+    "nbstripout>=0.9.1",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "ruff>=0.16.8",
+]
+ml = [
+    "pandas>=3.0.6",
+    "pyarrow>=25.0.1",
 ]
 [tool.ruff]
 line-length = 100
@@ -33,3 +40,6 @@ extend-immutable-calls = ["fastapi.Depends"]
 asyncio_mode = "auto"
 pythonpath = ["."]
 testpaths = ["tests"]
+
+[tool.uv]
+default-groups = ["dev", "ml"]
