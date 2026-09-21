@@ -3,8 +3,7 @@ import uuid
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 
-class RegisterRequest(BaseModel):
-    tenant_name: str = Field(min_length=1, max_length=200)
+class UserCreate(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
 
@@ -12,6 +11,10 @@ class RegisterRequest(BaseModel):
     @classmethod
     def lowercase_email(cls, value: str) -> str:
         return value.lower()
+
+
+class RegisterRequest(UserCreate):
+    tenant_name: str = Field(min_length=1, max_length=200)
 
 
 class UserRead(BaseModel):
