@@ -93,3 +93,24 @@ Own history is better at 28 days. Switch point between 14 and 28 days, set at
 
 Limits: simulated new products are established sellers with hidden history, so
 launch effects are absent. Run-to-run noise was not measured.
+
+## Final interval result (six scoring folds)
+
+Rule set before the run: LightGBM counts as better if its mean pinball loss is
+lower by more than 3%.
+
+| method | pinball_mean | pinball_10 | pinball_90 | above_upper | width |
+|---|---|---|---|---|---|
+| LightGBM quantile | 0.209 | 0.121 | 0.298 | 0.096 | 2.800 |
+| empirical 112d | 0.219 | 0.122 | 0.317 | 0.078 | 2.705 |
+
+LightGBM is 4.6% lower on average and wins all six folds (2.1% and 1.0% in the
+last two). On the validation folds it was about 1% worse, so the ranking
+depends on the fold. The gain is all in pinball_90. It is 3.5% wider overall
+and 37% wider on slow series. The upper miss rate drifts from 0.088 to 0.107
+over the folds; not tested.
+
+New-product rules confirmed on the scoring folds: the own-history mean beats
+peer blending at 7, 14 and 28 days (RMSSE 0.749, 0.730, 0.720). Upper bound
+miss rate at 7 days: 0.140 own history, 0.068 peer shape. LightGBM on unseen
+series moved from 0.816 (validation) to 0.944 at 7 days; not investigated.

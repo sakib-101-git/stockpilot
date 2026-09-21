@@ -41,3 +41,9 @@ choices and their trade-offs.
   pooled RMSE by about 3% (1.979 against 2.040), winning that measure in all
   six folds. It loses clearly on the December 2014 fold. Details in
   `docs/experiments.md` and `docs/decisions/`.
+
+- Prediction intervals: quantile LightGBM models give a 90th-percentile upper
+  bound for each forecast. Pinball loss is 4.6% lower than a simple
+  history-based bound over six folds, and 9.6% of outcomes exceed it (target
+  10%). For medium and slow series the lower end is zero, so it is a one-sided
+  bound. A separate fallback handles products with little history.
