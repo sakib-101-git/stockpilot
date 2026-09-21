@@ -9,7 +9,7 @@ Forecaster = Callable[[np.ndarray, int], np.ndarray]
 
 HORIZON = 28
 MIN_HISTORY = 56
-FOLDS = (1829, 1857, 1885, 1913)
+FOLDS = (1421, 1785, 1829, 1857, 1885, 1913)
 N_DAYS = 1941
 
 
