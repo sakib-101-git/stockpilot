@@ -103,3 +103,32 @@ def quantile_backtest(
         )
         rows.append(_score(origin, name, history.shape[0], grids, actual, quantiles, crossed))
     return pd.DataFrame(rows)
+
+
+def speed_groups(history: np.ndarray, window: int = 56) -> np.ndarray:
+    """Label each series slow, medium or fast by its average daily sales over the last days."""
+    level = pd.Series(np.nanmean(history[:, -window:], axis=1))
+    speed = pd.qcut(level.rank(method="first"), 3, labels=["slow", "medium", "fast"])
+    return speed.to_numpy()
+
+
+def interval_breakdown(
+    lower: np.ndarray, upper: np.ndarray, actual: np.ndarray, groups: np.ndarray
+) -> pd.DataFrame:
+    """Coverage and both miss rates for each group of series."""
+    rows = []
+    for group in pd.unique(groups):
+        mask = groups == group
+        lo, hi, act = lower[mask], upper[mask], actual[mask]
+        rows.append(
+            {
+                "group": group,
+                "n_series": int(mask.sum()),
+                "coverage": coverage(lo, hi, act),
+                "below_lower": float((act < lo).mean()),
+                "above_upper": float((act > hi).mean()),
+                "width": mean_width(lo, hi),
+                "lower_is_zero": float((lo == 0).mean()),
+            }
+        )
+    return pd.DataFrame(rows)
