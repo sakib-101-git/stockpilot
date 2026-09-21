@@ -3,6 +3,7 @@ import pandas as pd
 
 WINDOWS = (7, 28, 56)
 ZERO_WINDOW = 28
+SAME_WEEKDAY_WEEKS = 4
 
 
 def _divide(numerator: np.ndarray, denominator: np.ndarray) -> np.ndarray:
@@ -13,6 +14,22 @@ def _divide(numerator: np.ndarray, denominator: np.ndarray) -> np.ndarray:
         out=np.full(len(denominator), np.nan),
         where=denominator > 0,
     )
+
+
+def same_weekday_mean(
+    values: np.ndarray, origin: int, h: int, weeks: int = SAME_WEEKDAY_WEEKS
+) -> np.ndarray:
+    """Average sales on the target day's weekday over the last `weeks` such days.
+
+    Only days up to the origin are used.
+    """
+    day = origin + h
+    first = -(-h // 7)
+    days = [d for d in (day - 7 * k for k in range(first, first + weeks)) if d >= 1]
+    if not days:
+        return np.full(values.shape[0], np.nan)
+    block = values[:, [d - 1 for d in days]]
+    return _divide(np.nansum(block, axis=1), (~np.isnan(block)).sum(axis=1))
 
 
 def origin_features(values: np.ndarray, origin: int) -> pd.DataFrame:
@@ -69,6 +86,8 @@ FEATURE_COLUMNS = [
     "snap",
     "price",
     "price_ratio",
+    "wd_mean_4",
+    "wd_ratio",
 ]
 
 
@@ -120,6 +139,9 @@ def build_rows(
     for h in range(1, horizon + 1):
         day = origin + h
         frame = base.copy()
+        wd_mean = same_weekday_mean(values, origin, h)
+        frame["wd_mean_4"] = wd_mean
+        frame["wd_ratio"] = _divide(wd_mean, base["mean_28"].to_numpy())
         frame["origin"] = origin
         frame["target_day"] = day
         frame["h"] = h

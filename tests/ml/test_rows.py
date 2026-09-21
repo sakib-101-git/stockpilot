@@ -7,6 +7,7 @@ from ml.features import (
     FEATURE_COLUMNS,
     build_rows,
     calendar_features,
+    same_weekday_mean,
     series_states,
     training_table,
 )
@@ -150,3 +151,27 @@ def test_cutoff_too_early_for_any_origin_is_rejected() -> None:
     values, prices, cal, states = make_inputs()
     with pytest.raises(ValueError):
         training_table(values, prices, cal, states, cutoff=20, horizon=14, first_origin=20)
+
+
+def test_same_weekday_mean_uses_the_target_days_weekday_up_to_the_origin() -> None:
+    values = np.tile(np.arange(1.0, 101.0), (1, 1))
+    expected = (46 + 39 + 32 + 25) / 4
+    assert same_weekday_mean(values, origin=50, h=3)[0] == pytest.approx(expected)
+    assert same_weekday_mean(values, origin=50, h=10)[0] == pytest.approx(expected)
+
+
+def test_same_weekday_mean_near_the_start_uses_what_exists() -> None:
+    values = np.tile(np.arange(1.0, 101.0), (1, 1))
+    assert same_weekday_mean(values, origin=10, h=1)[0] == 4.0
+
+
+def test_rows_carry_the_weekday_features() -> None:
+    values, prices, cal, states = make_inputs()
+    rows = build_rows(values, prices, cal, states, origin=50, horizon=14)
+
+    first = rows[(rows["series_idx"] == 0) & (rows["h"] == 1)].iloc[0]
+    assert first["wd_mean_4"] == pytest.approx(33.5)
+    assert first["wd_ratio"] == pytest.approx(33.5 / 36.5)
+
+    late = rows[(rows["series_idx"] == 1) & (rows["h"] == 1)].iloc[0]
+    assert late["wd_mean_4"] == pytest.approx(44.0)
