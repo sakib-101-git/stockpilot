@@ -1,25 +1,13 @@
-import uuid
-
 import pytest
 from fastapi import HTTPException
 from httpx import ASGITransport, AsyncClient, Response
 
 from app.api.deps import get_current_user, require_roles
-from app.db.models import Role, User
+from app.db.models import Role
 from app.main import app
+from tests.helpers import make_user
 
 NEW_USER = {"email": "new@example.com", "password": "longenough1"}
-
-
-def make_user(role: Role) -> User:
-    return User(
-        id=uuid.uuid4(),
-        tenant_id=uuid.uuid4(),
-        email="someone@example.com",
-        hashed_password="not-a-real-hash",
-        role=role,
-        is_active=True,
-    )
 
 
 async def post_users() -> Response:
