@@ -8,3 +8,4 @@ folds. Lower RMSSE is better.
 | 0 | moving average 28d (reference) | 0.661 | 0.697 | 0.679 |
 | 1 | LightGBM plain, 14 features | 0.674 | 0.695 | 0.685 |
 | 2 | + loss weights of 1 / series scale | 0.664 | 0.688 | 0.676 |
+| 3 | + same-weekday mean and ratio (16 features) | 0.663 | 0.688 | 0.675 |
