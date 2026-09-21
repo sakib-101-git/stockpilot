@@ -12,6 +12,7 @@ dependencies = [
     "pyarrow>=25.0.1",
     "pydantic-settings>=2.15.0",
     "pyjwt>=2.14.0",
+    "python-multipart>=0.0.32",
     "redis>=8.1.0",
     "sqlalchemy[asyncio]>=2.0.54",
     "uvicorn[standard]>=0.53.0",

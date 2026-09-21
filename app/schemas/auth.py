@@ -21,3 +21,8 @@ class UserRead(BaseModel):
     tenant_id: uuid.UUID
     email: EmailStr
     role: str
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
