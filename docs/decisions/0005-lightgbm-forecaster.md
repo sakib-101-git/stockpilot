@@ -50,9 +50,13 @@ defaults stay.
   because it matches it, wins on volume-weighted error, and supports quantile
   models and feature attributions. The baselines stay as references and as
   fallbacks.
-- Known weakness: fold 1421 (Christmas 2014) has RMSSE 0.706 against 0.654 for
-  the best baseline, while its pooled RMSE is the best. It forecasts busy
-  series well and quiet series badly there. The cause is not established.
+- Known weakness: on the slowest third of series the model loses clearly in
+  fold 1421 (RMSSE 0.724 against 0.527 for the moving average). On the
+  busiest third it wins (0.712 against 0.754) and on the middle third it ties.
+  Christmas Day itself was forecast better than the baseline (RMSE 1.16
+  against 2.57): the average across series was zero that day, LightGBM
+  predicted 0.47 and the moving average 1.2. Why slow series lose is not yet
+  established.
 - Sales are not demand: stockouts appear as zeros.
 - Each series counts equally in RMSSE. M5's official metric weights by revenue.
 - The loss weights and their cap are first guesses and were not tuned.
