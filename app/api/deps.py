@@ -4,6 +4,7 @@ from collections.abc import Awaitable, Callable
 import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import decode_access_token
@@ -33,6 +34,10 @@ async def get_current_user(
     if user is None or not user.is_active:
         raise credentials_error
 
+    await session.execute(
+        text("SELECT set_config('app.current_tenant', :tenant_id, true)"),
+        {"tenant_id": str(user.tenant_id)},
+    )
     return user
 
 
