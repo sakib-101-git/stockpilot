@@ -34,3 +34,16 @@ Process note: choices were judged on validation folds 1250 and 1700. One
 exception: the idea of weighting the loss came from diagnosing the first
 prototype by category and speed on fold 1913, a scoring fold, so that fold was
 not completely untouched.
+
+
+## Prediction intervals (10% to 90%, validation folds 1250 and 1700)
+
+| method | pinball_mean | coverage | width |
+|---|---|---|---|
+| empirical 112d | 0.211 | 0.922 | 2.688 |
+| LightGBM quantile | 0.213 | 0.885 | 2.635 |
+| LightGBM quantile, weighted | 0.217 | 0.890 | 2.566 |
+
+LightGBM does not beat the empirical baseline by the 3% margin set in advance.
+Weighted is worse than unweighted, so unweighted stays. Coverage is above the
+80% target for all three.

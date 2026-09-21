@@ -57,6 +57,11 @@ defaults stay.
   against 2.57): the average across series was zero that day, LightGBM
   predicted 0.47 and the moving average 1.2. Why slow series lose is not yet
   established.
+    Not caused by Christmas Day (the gap is the same without it). LightGBM
+  over-forecasts the slow group by 23% (0.179 against 0.145 actual) but the
+  moving average under-forecasts it by 31% and still wins, so group-level bias
+  is not the explanation. Untested guess: LightGBM's forecasts for individual
+  quiet series vary more than a plain average.
 - Sales are not demand: stockouts appear as zeros.
 - Each series counts equally in RMSSE. M5's official metric weights by revenue.
 - The loss weights and their cap are first guesses and were not tuned.
