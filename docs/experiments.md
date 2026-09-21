@@ -47,3 +47,19 @@ not completely untouched.
 LightGBM does not beat the empirical baseline by the 3% margin set in advance.
 Weighted is worse than unweighted, so unweighted stays. Coverage is above the
 80% target for all three.
+
+
+## Interval calibration by speed group (validation folds 1250 and 1700)
+
+Share of outcomes above the upper end (target 0.10, accepted band 0.07 to 0.13,
+a guess made before the run):
+
+| method | all | fast | medium | slow |
+|---|---|---|---|---|
+| LightGBM quantile | 0.100 | 0.107 | 0.118 | 0.075 |
+| empirical 112d | 0.070 | 0.089 | 0.072 | 0.050 |
+
+LightGBM's upper end is inside the band in every group. For medium and slow
+series the lower end is 0 in every cell, so the 10% to 90% range is effectively
+a one-sided upper bound. Pinball_90 still favours the baseline (0.300 against
+0.308): calibration on average does not imply better per-series accuracy.
