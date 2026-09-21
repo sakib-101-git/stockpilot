@@ -49,3 +49,111 @@ def origin_features(values: np.ndarray, origin: int) -> pd.DataFrame:
     features["history_days"] = n_days - first_day + 1
 
     return pd.DataFrame(features)
+
+
+FEATURE_COLUMNS = [
+    "last_day",
+    "mean_7",
+    "mean_28",
+    "mean_56",
+    "zero_share_28",
+    "days_since_sale",
+    "history_days",
+    "h",
+    "dow",
+    "month",
+    "event",
+    "snap",
+    "price",
+    "price_ratio",
+]
+
+
+def calendar_features(calendar: pd.DataFrame) -> pd.DataFrame:
+    """Calendar facts for every day number. Known in advance, so safe for any target day."""
+    cal = calendar.assign(day=calendar["d"].str[2:].astype(int)).set_index("day").sort_index()
+    return pd.DataFrame(
+        {
+            "dow": cal["date"].dt.dayofweek,
+            "month": cal["date"].dt.month,
+            "event": cal["event_type_1"].astype("category").cat.codes + 1,
+            "snap_CA": cal["snap_CA"],
+            "snap_TX": cal["snap_TX"],
+            "snap_WI": cal["snap_WI"],
+        }
+    )
+
+
+def series_states(series_names) -> list[str]:
+    """State code for each series name such as 'CA_1/FOODS_1_046'."""
+    return [name.split("/")[0][:2] for name in series_names]
+
+
+def _last_known(grid: np.ndarray) -> np.ndarray:
+    observed = ~np.isnan(grid)
+    last_index = grid.shape[1] - 1 - np.argmax(observed[:, ::-1], axis=1)
+    return grid[np.arange(grid.shape[0]), last_index]
+
+
+def build_rows(
+    values: np.ndarray,
+    prices: np.ndarray,
+    cal: pd.DataFrame,
+    states: list[str],
+    origin: int,
+    horizon: int = 28,
+) -> pd.DataFrame:
+    """One row per series and target day for a single origin."""
+    if origin + horizon > values.shape[1]:
+        raise ValueError("origin + horizon extends beyond the available days")
+
+    base = origin_features(values, origin)
+    base["series_idx"] = np.arange(len(base))
+    last_price = _last_known(prices[:, :origin])
+    snap_by_state = {state: cal[f"snap_{state}"].to_numpy() for state in set(states)}
+    snap = np.stack([snap_by_state[state] for state in states])
+
+    frames = []
+    for h in range(1, horizon + 1):
+        day = origin + h
+        frame = base.copy()
+        frame["origin"] = origin
+        frame["target_day"] = day
+        frame["h"] = h
+        frame["dow"] = cal.at[day, "dow"]
+        frame["month"] = cal.at[day, "month"]
+        frame["event"] = cal.at[day, "event"]
+        frame["snap"] = snap[:, day - 1]
+        frame["price"] = prices[:, day - 1]
+        frame["price_ratio"] = frame["price"] / last_price
+        frame["y"] = values[:, day - 1]
+        frames.append(frame)
+
+    rows = pd.concat(frames, ignore_index=True)
+    return rows[rows["history_days"].notna() & rows["y"].notna()].reset_index(drop=True)
+
+
+def training_table(
+    values: np.ndarray,
+    prices: np.ndarray,
+    cal: pd.DataFrame,
+    states: list[str],
+    cutoff: int,
+    horizon: int = 28,
+    stride: int = 7,
+    first_origin: int = 100,
+) -> pd.DataFrame:
+    """Training rows whose targets all fall on or before day `cutoff`.
+
+    The arrays are cut at `cutoff` first, so later days cannot be read at all.
+    """
+    if cutoff > values.shape[1]:
+        raise ValueError("cutoff is beyond the available days")
+
+    values, prices = values[:, :cutoff], prices[:, :cutoff]
+    origins = range(first_origin, cutoff - horizon + 1, stride)
+    if not origins:
+        raise ValueError("no training origins fit before the cutoff")
+
+    frames = [build_rows(values, prices, cal, states, origin, horizon) for origin in origins]
+    return pd.concat(frames, ignore_index=True)

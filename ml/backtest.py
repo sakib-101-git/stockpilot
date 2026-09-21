@@ -13,13 +13,13 @@ FOLDS = (1421, 1785, 1829, 1857, 1885, 1913)
 N_DAYS = 1941
 
 
-def make_grid(sales: pd.DataFrame, n_days: int = N_DAYS) -> pd.DataFrame:
+def make_grid(sales: pd.DataFrame, n_days: int = N_DAYS, value: str = "units") -> pd.DataFrame:
     """One row per series, one column per day number. Days before launch are NaN."""
     prepared = sales.assign(
         series=sales["store_id"] + "/" + sales["item_id"],
         day=sales["d"].str[2:].astype(int),
     )
-    grid = prepared.pivot(index="series", columns="day", values="units")
+    grid = prepared.pivot(index="series", columns="day", values=value)
     return grid.reindex(columns=range(1, n_days + 1))
 
 
