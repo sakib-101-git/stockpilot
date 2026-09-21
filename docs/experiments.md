@@ -63,3 +63,33 @@ LightGBM's upper end is inside the band in every group. For medium and slow
 series the lower end is 0 in every cell, so the 10% to 90% range is effectively
 a one-sided upper bound. Pinball_90 still favours the baseline (0.300 against
 0.308): calibration on average does not imply better per-series accuracy.
+
+
+## New-product fallback (validation folds 1250 and 1700, 3 seeds)
+
+About 20% of established series had their history hidden, leaving 7, 14 or 28
+days. Peers are other established series of the same store and category.
+
+RMSSE:
+
+| history days | 7 | 14 | 28 |
+|---|---|---|---|
+| own history mean | 0.730 | 0.715 | 0.713 |
+| shrunk to peers, k0=7 | 0.875 | 0.799 | 0.753 |
+| LightGBM, unseen series | 0.816 | 0.769 | 0.755 |
+
+Upper 90% bound, share of outcomes above it (target 0.10):
+
+| history days | 7 | 14 | 28 |
+|---|---|---|---|
+| own history quantile | 0.149 | 0.119 | 0.090 |
+| peer shape, k0=7 | 0.074 | 0.080 | 0.086 |
+
+Decision: peer blending does not beat the own-history mean, so it is not used
+for point forecasts. For the upper bound, peer shape with k0=7 is better
+calibrated below 14 days (and 4% better on pinball at 7 days) but 40% higher.
+Own history is better at 28 days. Switch point between 14 and 28 days, set at
+21, untested.
+
+Limits: simulated new products are established sellers with hidden history, so
+launch effects are absent. Run-to-run noise was not measured.
