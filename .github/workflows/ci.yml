@@ -7,9 +7,33 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: timescale/timescaledb:latest-pg16
+        env:
+          POSTGRES_USER: stockpilot
+          POSTGRES_PASSWORD: stockpilot
+          POSTGRES_DB: stockpilot_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U stockpilot -d stockpilot_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     env:
       ENVIRONMENT: ci
-      DATABASE_URL: postgresql+asyncpg://stockpilot:stockpilot@localhost:5432/stockpilot
+      DATABASE_URL: postgresql+asyncpg://stockpilot:stockpilot@localhost:5432/stockpilot_test
+      TEST_DATABASE_URL: postgresql+asyncpg://stockpilot:stockpilot@localhost:5432/stockpilot_test
       REDIS_URL: redis://localhost:6379/0
       JWT_SECRET_KEY: ci-test-secret-key-that-is-long-enough-for-hs256
     steps:
