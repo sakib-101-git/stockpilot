@@ -34,9 +34,11 @@ ml = [
     "pandas>=3.0.6",
     "pyarrow>=25.0.1",
 ]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+extend-exclude = ["notebooks"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
