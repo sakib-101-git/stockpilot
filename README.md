@@ -35,3 +35,9 @@ Stockpilot uses a sample of the M5 (Walmart) dataset.
 See [`docs/decisions/`](docs/decisions/) for short notes on the main technical
 choices and their trade-offs.
 
+- Forecasting: rolling-origin backtest (six folds, 28-day horizon, two
+  Christmas windows) with leakage tests. A weighted LightGBM matches the best
+  statistical baselines on RMSSE (0.712 against 0.709 for AutoETS) and cuts
+  pooled RMSE by about 3% (1.979 against 2.040), winning that measure in all
+  six folds. It loses clearly on the December 2014 fold. Details in
+  `docs/experiments.md` and `docs/decisions/`.
