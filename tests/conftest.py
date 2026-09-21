@@ -57,4 +57,3 @@ async def client(db_engine: AsyncEngine) -> AsyncIterator[AsyncClient]:
     async with AsyncClient(transport=transport, base_url="http://test") as test_client:
         yield test_client
     app.dependency_overrides.clear()
-    

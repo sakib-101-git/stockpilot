@@ -17,6 +17,7 @@ def make_user(role: Role) -> User:
         is_active=True,
     )
 
+
 PASSWORD = "correct-horse-9"
 
 

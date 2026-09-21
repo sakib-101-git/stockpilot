@@ -11,7 +11,9 @@ def test_suite_runs_against_the_test_database() -> None:
 
 async def test_migrations_created_the_tables(db_engine: AsyncEngine) -> None:
     async with db_engine.connect() as conn:
-        result = await conn.execute(text("SELECT tablename FROM pg_tables WHERE schemaname = 'public'"))
+        result = await conn.execute(
+            text("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
+        )
         names = {row[0] for row in result}
     assert {"tenants", "users", "products", "suppliers"} <= names
 
