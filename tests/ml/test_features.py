@@ -58,3 +58,15 @@ def test_features_do_not_change_when_the_future_changes() -> None:
 def test_origin_outside_the_data_is_rejected(origin: int) -> None:
     with pytest.raises(ValueError):
         origin_features(np.ones((1, 10)), origin)
+
+
+def test_scale_sq_is_the_mean_squared_one_step_change() -> None:
+    row = origin_features(np.array([[np.nan, 2.0, 0.0, 4.0]]), origin=4).iloc[0]
+    assert row["scale_sq"] == pytest.approx(10.0)
+
+
+def test_scale_sq_is_missing_for_constant_or_unlaunched_series() -> None:
+    constant = origin_features(np.zeros((1, 5)), origin=5).iloc[0]
+    unlaunched = origin_features(np.full((1, 5), np.nan), origin=5).iloc[0]
+    assert np.isnan(constant["scale_sq"])
+    assert np.isnan(unlaunched["scale_sq"])

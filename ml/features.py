@@ -48,6 +48,9 @@ def origin_features(values: np.ndarray, origin: int) -> pd.DataFrame:
     first_day = np.where(observed.any(axis=1), observed.argmax(axis=1) + 1, np.nan)
     features["history_days"] = n_days - first_day + 1
 
+    changes = np.diff(history, axis=1)
+    scale_sq = _divide(np.nansum(changes**2, axis=1), (~np.isnan(changes)).sum(axis=1))
+    features["scale_sq"] = np.where(scale_sq > 0, scale_sq, np.nan)
     return pd.DataFrame(features)
 
 
