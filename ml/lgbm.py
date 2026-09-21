@@ -23,9 +23,9 @@ DEFAULT_PARAMS = {
 }
 
 
-def loss_weights(scale_sq: pd.Series) -> np.ndarray:
-    """Row weights that make squared error mirror RMSSE: 1 / the series' own scale."""
-    weight = 1.0 / scale_sq.to_numpy(dtype=float)
+def loss_weights(scale_sq: pd.Series, power: float = 1.0) -> np.ndarray:
+    """Row weights of 1 / scale_sq**power. Power 1 mirrors RMSSE, 0.5 mirrors pinball loss."""
+    weight = scale_sq.to_numpy(dtype=float) ** -power
     finite = np.isfinite(weight)
     if not finite.any():
         return np.ones(len(weight))
@@ -34,10 +34,13 @@ def loss_weights(scale_sq: pd.Series) -> np.ndarray:
 
 
 def fit(
-    train_table: pd.DataFrame, weighted: bool = False, params: dict | None = None
+    train_table: pd.DataFrame,
+    weighted: bool = False,
+    params: dict | None = None,
+    weight_power: float = 1.0,
 ) -> lgb.LGBMRegressor:
     model = lgb.LGBMRegressor(**{**DEFAULT_PARAMS, **(params or {})})
-    weight = loss_weights(train_table["scale_sq"]) if weighted else None
+    weight = loss_weights(train_table["scale_sq"], weight_power) if weighted else None
     model.fit(
         train_table[FEATURE_COLUMNS],
         train_table["y"],

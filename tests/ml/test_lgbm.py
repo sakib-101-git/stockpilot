@@ -88,3 +88,11 @@ def test_backtest_returns_one_row_per_origin_with_all_metrics() -> None:
     assert list(results["origin"]) == [150, 170]
     assert set(results["method"]) == {"lgbm"}
     assert {"MAE", "RMSE", "bias", "MASE", "RMSSE"} <= set(results.columns)
+
+
+def test_lower_power_flattens_the_weights() -> None:
+    scale = pd.Series([1.0, 2.0, 4.0])
+    full = loss_weights(scale, power=1.0)
+    half = loss_weights(scale, power=0.5)
+    assert half[0] > half[1] > half[2]
+    assert half.max() / half.min() < full.max() / full.min()
