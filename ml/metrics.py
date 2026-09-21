@@ -28,3 +28,18 @@ def mase(forecast: np.ndarray, actual: np.ndarray, history: np.ndarray) -> float
 def rmsse(forecast: np.ndarray, actual: np.ndarray, history: np.ndarray) -> float:
     mse = ((forecast - actual) ** 2).mean(axis=1)
     return float(np.nanmean(np.sqrt(mse / one_step_scale(history, squared=True))))
+
+
+def pinball(forecast: np.ndarray, actual: np.ndarray, q: float) -> float:
+    """Average pinball loss for the q-quantile. Lower is better."""
+    diff = actual - forecast
+    return float(np.mean(np.maximum(q * diff, (q - 1) * diff)))
+
+
+def coverage(lower: np.ndarray, upper: np.ndarray, actual: np.ndarray) -> float:
+    """Share of actual values inside [lower, upper], ends included."""
+    return float(np.mean((actual >= lower) & (actual <= upper)))
+
+
+def mean_width(lower: np.ndarray, upper: np.ndarray) -> float:
+    return float(np.mean(upper - lower))

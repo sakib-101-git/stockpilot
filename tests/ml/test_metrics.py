@@ -3,7 +3,7 @@ import math
 import numpy as np
 import pytest
 
-from ml.metrics import bias, mae, mase, one_step_scale, rmse, rmsse
+from ml.metrics import bias, coverage, mae, mase, mean_width, one_step_scale, pinball, rmse, rmsse
 
 FORECAST = np.array([[1.0, 2.0, 3.0]])
 ACTUAL = np.array([[2.0, 2.0, 5.0]])
@@ -47,3 +47,30 @@ def test_series_without_a_scale_are_skipped_not_counted_as_zero() -> None:
     forecast = np.array([[9.0], [3.0]])
     actual = np.array([[1.0], [5.0]])
     assert mase(forecast, actual, history) == pytest.approx(1.2)
+
+
+def test_pinball_charges_misses_asymmetrically() -> None:
+    actual, forecast = np.array([10.0, 2.0]), np.array([6.0, 6.0])
+    assert pinball(forecast[:1], actual[:1], 0.9) == pytest.approx(3.6)
+    assert pinball(forecast[1:], actual[1:], 0.9) == pytest.approx(0.4)
+    assert pinball(forecast, actual, 0.9) == pytest.approx(2.0)
+
+
+def test_median_pinball_is_half_the_mae() -> None:
+    forecast, actual = np.array([1.0, 2.0, 3.0]), np.array([2.0, 2.0, 5.0])
+    assert pinball(forecast, actual, 0.5) == pytest.approx(mae(forecast, actual) / 2)
+
+
+def test_perfect_quantile_forecast_scores_zero() -> None:
+    actual = np.array([1.0, 4.0])
+    assert pinball(actual, actual, 0.1) == 0.0
+
+
+def test_coverage_counts_values_inside_the_interval_ends_included() -> None:
+    lower, upper = np.zeros(4), np.full(4, 2.0)
+    actual = np.array([1.0, 2.0, 3.0, 0.0])
+    assert coverage(lower, upper, actual) == pytest.approx(0.75)
+
+
+def test_mean_width() -> None:
+    assert mean_width(np.array([0.0, 1.0]), np.array([2.0, 5.0])) == pytest.approx(3.0)
