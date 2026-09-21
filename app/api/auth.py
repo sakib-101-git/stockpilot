@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db.models import Role, Tenant, User
 from app.db.session import get_session
@@ -60,3 +61,8 @@ async def login(
 
     token = create_access_token(str(user.id), str(user.tenant_id), user.role)
     return Token(access_token=token)
+
+
+@router.get("/me", response_model=UserRead)
+async def me(current_user: User = Depends(get_current_user)) -> User:
+    return current_user
