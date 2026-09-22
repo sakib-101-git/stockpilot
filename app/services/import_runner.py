@@ -57,6 +57,7 @@ async def run_import(
     existing_skus = set(existing.scalars().all())
 
     created = 0
+    still_valid = []
     for row in parsed.valid_rows:
         if row.sku in existing_skus:
             parsed.errors.append(
@@ -68,7 +69,9 @@ async def run_import(
             continue
         session.add(Product(tenant_id=tenant_id, **row.model_dump()))
         existing_skus.add(row.sku)
+        still_valid.append(row)
         created += 1
+    parsed.valid_rows = still_valid
 
     job.total_rows = parsed.total_rows
     job.error_rows = len(parsed.errors)

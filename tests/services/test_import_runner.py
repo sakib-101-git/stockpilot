@@ -92,6 +92,7 @@ async def test_sku_already_in_database_is_reported_as_an_error(
     assert job.status == ImportStatus.SUCCEEDED
     assert job.error_rows == 1
     assert "already exists" in job.error_report
+    assert job.total_rows == 2
 
     async with maker() as session:
         result = await session.execute(select(Product).where(Product.tenant_id == tenant_id))
