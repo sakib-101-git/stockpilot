@@ -9,6 +9,7 @@ from scripts.synth.generate import (
     plan_links,
     plan_opening_stock,
     plan_suppliers,
+    summarize_products,
 )
 
 
