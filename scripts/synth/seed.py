@@ -5,11 +5,12 @@ Idempotent per tenant: re-running skips tenants that already have suppliers.
 """
 
 import asyncio
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
@@ -42,6 +43,14 @@ async def _seed_tenant(
     origin_date: date,
     rng: np.random.Generator,
 ) -> None:
+    # Row-level security requires app.current_tenant to be set before the
+    # very first query on a tenant-scoped table, or that query silently
+    # returns zero rows (see the CSV import fix earlier this week).
+    await session.execute(
+        text("SELECT set_config('app.current_tenant', :tenant_id, true)"),
+        {"tenant_id": str(tenant.id)},
+    )
+
     existing = await session.execute(select(Supplier).where(Supplier.tenant_id == tenant.id))
     if existing.scalars().first() is not None:
         print(f"  {tenant.name}: already seeded, skipping")
@@ -91,7 +100,7 @@ async def _seed_tenant(
             movement_type=MovementType.RECEIPT,
             quantity=s.quantity,
             reference="synthetic opening stock",
-            occurred_at=s.occurred_on,
+            occurred_at=datetime.combine(s.occurred_on, datetime.min.time(), tzinfo=UTC),
         )
         for s in stock_plans
     )
@@ -118,8 +127,6 @@ async def _seed_tenant(
 
 
 async def main() -> None:
-    from pathlib import Path
-
     root = Path(__file__).resolve().parents[2]
     sales = pd.read_parquet(root / "data" / "processed" / "sales.parquet")
     products = summarize_products(sales)
@@ -131,9 +138,8 @@ async def main() -> None:
         for i, tenant in enumerate(tenants):
             rng = np.random.default_rng(SEED + i)
             store_id = tenant.name.split(" ")[0]
-            await _seed_tenant(
-                session, tenant, products[products["store_id"] == store_id], origin_date, rng
-            )
+            store_products = products[products["store_id"] == store_id]
+            await _seed_tenant(session, tenant, store_products, origin_date, rng)
 
 
 if __name__ == "__main__":
