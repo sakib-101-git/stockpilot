@@ -11,7 +11,7 @@ Run continuously: uv run python -m workers.stream_consumer
 
 import asyncio
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from redis.asyncio import Redis
 from sqlalchemy import select, text
@@ -61,7 +61,7 @@ async def process_event(session: AsyncSession, fields: dict[str, str]) -> None:
     product_id = uuid.UUID(fields["product_id"])
     quantity = int(fields["quantity"])
     event_id = fields["event_id"]
-    occurred_at = datetime.fromisoformat(fields["occurred_at"])
+    occurred_at = datetime.fromisoformat(fields["occurred_at"]).replace(tzinfo=UTC)
 
     await session.execute(
         text("SELECT set_config('app.current_tenant', :tenant_id, true)"),
