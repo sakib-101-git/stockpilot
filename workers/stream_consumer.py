@@ -1,8 +1,10 @@
 """Redis Streams consumer: turns sales events into stock_movements rows.
 
 Idempotent on event_id (stored in StockMovement.reference), so a redelivered
-event is not double-counted. Retry and dead-letter handling for genuinely
-failing events are not yet implemented here — see the next step.
+event is not double-counted. Failed events are retried up to MAX_DELIVERIES
+times (tracked via Redis's own per-entry delivery count), then moved to the
+sales-events-dead stream and acked off the main stream, so a permanently
+failing event cannot block progress forever.
 
 Run continuously: uv run python -m workers.stream_consumer
 """
@@ -19,7 +21,10 @@ from app.core.config import settings
 from app.db.models import MovementType, StockMovement
 
 STREAM_NAME = "sales-events"
+DEAD_LETTER_STREAM = "sales-events-dead"
 GROUP_NAME = "stock-consumers"
+MAX_DELIVERIES = 3
+CLAIM_IDLE_MS = 30_000  # reclaim entries pending longer than this
 
 
 async def ensure_group(redis: Redis, stream: str = STREAM_NAME, group: str = GROUP_NAME) -> None:
@@ -49,9 +54,8 @@ async def already_processed(session: AsyncSession, tenant_id: uuid.UUID, event_i
 async def process_event(session: AsyncSession, fields: dict[str, str]) -> None:
     """Write one sale as a negative StockMovement. Idempotent on event_id.
 
-    Raises ValueError/KeyError for a malformed event (missing or unparseable
-    field) rather than silently doing nothing — the caller decides what a
-    malformed event means for retry/dead-letter purposes.
+    Raises for a malformed or otherwise unprocessable event, rather than
+    silently doing nothing. The caller decides retry/dead-letter behavior.
     """
     tenant_id = uuid.UUID(fields["tenant_id"])
     product_id = uuid.UUID(fields["product_id"])
@@ -80,14 +84,42 @@ async def process_event(session: AsyncSession, fields: dict[str, str]) -> None:
     await session.commit()
 
 
-async def run_consumer(consumer_name: str = "consumer-1") -> None:
-    """Read events forever, write each one, ack on success.
+async def delivery_count(redis: Redis, entry_id: bytes) -> int:
+    """How many times this entry has been claimed, per Redis's own tracking."""
+    detail = await redis.xpending_range(
+        STREAM_NAME, GROUP_NAME, min=entry_id, max=entry_id, count=1
+    )
+    if not detail:
+        return 0
+    return detail[0]["times_delivered"]
 
-    On failure: logs and does NOT ack, so the entry stays pending. There is
-    no reclaim/retry logic yet — a failed entry sits pending indefinitely
-    until the next step adds XAUTOCLAIM-based redelivery and a dead-letter
-    stream for entries that keep failing.
-    """
+
+async def move_to_dead_letter(
+    redis: Redis, entry_id: bytes, fields: dict[str, str], reason: str
+) -> None:
+    await redis.xadd(DEAD_LETTER_STREAM, {**fields, "failure_reason": reason})
+    await redis.xack(STREAM_NAME, GROUP_NAME, entry_id)
+
+
+async def handle_entry(
+    redis: Redis, session_maker, entry_id: bytes, raw_fields: dict[bytes, bytes]
+) -> None:
+    fields = decode_fields(raw_fields)
+    try:
+        async with session_maker() as session:
+            await process_event(session, fields)
+        await redis.xack(STREAM_NAME, GROUP_NAME, entry_id)
+        print(f"processed {entry_id.decode()}: {fields.get('event_id')}")
+    except Exception as exc:
+        deliveries = await delivery_count(redis, entry_id)
+        if deliveries >= MAX_DELIVERIES:
+            await move_to_dead_letter(redis, entry_id, fields, str(exc))
+            print(f"DEAD-LETTERED {entry_id.decode()} after {deliveries} attempts: {exc}")
+        else:
+            print(f"FAILED {entry_id.decode()} (attempt {deliveries}): {exc} — will retry")
+
+
+async def run_consumer(consumer_name: str = "consumer-1") -> None:
     redis = Redis.from_url(settings.redis_url)
     engine = create_async_engine(settings.database_url, pool_pre_ping=True)
     session_maker = async_sessionmaker(engine, expire_on_commit=False)
@@ -95,6 +127,14 @@ async def run_consumer(consumer_name: str = "consumer-1") -> None:
 
     try:
         while True:
+            # First, reclaim any entries stuck pending from a crashed/slow consumer.
+            _, claimed, _ = await redis.xautoclaim(
+                STREAM_NAME, GROUP_NAME, consumer_name, min_idle_time=CLAIM_IDLE_MS, start_id="0"
+            )
+            for entry_id, raw_fields in claimed:
+                await handle_entry(redis, session_maker, entry_id, raw_fields)
+
+            # Then read genuinely new entries.
             result = await redis.xreadgroup(
                 GROUP_NAME, consumer_name, {STREAM_NAME: ">"}, count=10, block=5000
             )
@@ -102,14 +142,7 @@ async def run_consumer(consumer_name: str = "consumer-1") -> None:
                 continue
             _, entries = result[0]
             for entry_id, raw_fields in entries:
-                fields = decode_fields(raw_fields)
-                try:
-                    async with session_maker() as session:
-                        await process_event(session, fields)
-                    await redis.xack(STREAM_NAME, GROUP_NAME, entry_id)
-                    print(f"processed {entry_id.decode()}: {fields.get('event_id')}")
-                except Exception as exc:
-                    print(f"FAILED {entry_id.decode()}: {exc} (left pending, no retry yet)")
+                await handle_entry(redis, session_maker, entry_id, raw_fields)
     finally:
         await engine.dispose()
         await redis.aclose()
