@@ -47,7 +47,12 @@ async def db_engine(migrated_db: None) -> AsyncIterator[AsyncEngine]:
     """Owner connection: sees every row and ignores row-level security."""
     engine = create_async_engine(OWNER_URL, poolclass=NullPool)
     async with engine.begin() as conn:
-        await conn.execute(text("TRUNCATE tenants, users, products, suppliers CASCADE"))
+        await conn.execute(
+            text(
+                "TRUNCATE tenants, users, products, suppliers, product_suppliers, "
+                "stock_movements, batches, import_jobs CASCADE"
+            )
+        )
     yield engine
     await engine.dispose()
 
