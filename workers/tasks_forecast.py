@@ -7,9 +7,10 @@ Price and zero-sale-day simplifications: see app/services/forecast_data.py.
 
 import uuid
 from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 
 import pandas as pd
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Forecast, Tenant
@@ -19,11 +20,15 @@ from ml.lgbm import fit
 from ml.lgbm import forecast_future as lgbm_forecast_future
 from ml.quantiles import fit_quantile
 from ml.registry import champion_version, log_and_register, promote_to_champion
+from workers.celery_app import celery_app, run_async
 
 HORIZON = 28
 MIN_HISTORY = 56
 DEFAULT_FIRST_ORIGIN = 100
 DEFAULT_STRIDE = 7
+DEFAULT_CALENDAR_PATH = (
+    Path(__file__).resolve().parents[1] / "data" / "processed" / "calendar.parquet"
+)
 
 
 async def _set_tenant(session: AsyncSession, tenant_id: uuid.UUID) -> None:
@@ -140,3 +145,35 @@ async def generate_forecasts_for_tenant(
             written += 1
     await session.commit()
     return written
+
+
+async def _run_nightly_forecasts_async(calendar_path: Path) -> dict[str, int]:
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    from app.core.config import settings
+
+    engine = create_async_engine(settings.database_url, pool_pre_ping=True)
+    results: dict[str, int] = {}
+    try:
+        session_maker = async_sessionmaker(engine, expire_on_commit=False)
+        async with session_maker() as session:
+            tenants = (await session.execute(select(Tenant))).scalars().all()
+
+        for tenant in tenants:
+            async with session_maker() as session:
+                try:
+                    written = await generate_forecasts_for_tenant(session, tenant.id, calendar_path)
+                    results[str(tenant.id)] = written
+                    print(f"tenant {tenant.name}: wrote {written} forecast rows")
+                except Exception as exc:
+                    results[str(tenant.id)] = -1
+                    print(f"tenant {tenant.name}: FAILED - {exc}")
+    finally:
+        await engine.dispose()
+    return results
+
+
+@celery_app.task(name="workers.run_nightly_forecasts")
+def run_nightly_forecasts() -> dict[str, int]:
+    """Celery entry point. Generates forecasts for every tenant, nightly."""
+    return run_async(_run_nightly_forecasts_async(DEFAULT_CALENDAR_PATH))

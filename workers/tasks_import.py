@@ -1,10 +1,8 @@
 """Background import tasks."""
 
-import asyncio
-import concurrent.futures
 import uuid
 
-from workers.celery_app import celery_app
+from workers.celery_app import celery_app, run_async
 
 
 @celery_app.task(name="workers.ping")
@@ -13,28 +11,10 @@ def ping() -> str:
     return "pong"
 
 
-def _run_async(coro):
-    """Run an async function whether or not an event loop is already active.
-
-    In production (a real Celery worker), there is no running loop, so
-    asyncio.run() works normally. In tests, task_always_eager executes the
-    task inline inside pytest-asyncio's loop, so the coroutine is run on a
-    separate thread instead, to avoid nesting event loops.
-    """
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        asyncio.run(coro)
-        return
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        pool.submit(asyncio.run, coro).result()
-
-
 @celery_app.task(name="workers.run_product_import")
 def run_product_import(job_id: str, tenant_id: str, file_path: str) -> None:
     """Entry point Celery calls. Bridges into the async import logic."""
-    _run_async(_run_product_import_async(job_id, tenant_id, file_path))
+    run_async(_run_product_import_async(job_id, tenant_id, file_path))
 
 
 async def _run_product_import_async(job_id: str, tenant_id: str, file_path: str) -> None:
