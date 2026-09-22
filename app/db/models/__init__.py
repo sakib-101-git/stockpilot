@@ -1,4 +1,5 @@
 from app.db.models.batch import Batch
+from app.db.models.forecast import Forecast
 from app.db.models.import_job import ImportJob, ImportStatus
 from app.db.models.product import Product
 from app.db.models.stock import MovementType, StockMovement
@@ -9,6 +10,7 @@ from app.db.models.user import Role, User
 
 __all__ = [
     "Batch",
+    "Forecast",
     "ImportJob",
     "ImportStatus",
     "MovementType",
