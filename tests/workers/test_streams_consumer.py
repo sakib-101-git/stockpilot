@@ -7,6 +7,7 @@ from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
+from app.core.config import settings
 from app.db.models import MovementType, Product, StockMovement
 from tests.helpers import register
 from workers.stream_consumer import (
@@ -20,7 +21,7 @@ from workers.stream_consumer import (
 
 
 async def test_move_to_dead_letter_writes_fields_and_reason_then_acks() -> None:
-    redis = Redis.from_url("redis://localhost:6380/0")
+    redis = Redis.from_url(settings.redis_url)
     stream, group = "test-dlq-source", "test-dlq-group"
     await redis.delete(stream, DEAD_LETTER_STREAM)
     try:
