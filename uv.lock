@@ -3107,18 +3107,12 @@ dependencies = [
     { name = "celery" },
     { name = "email-validator" },
     { name = "fastapi" },
-    { name = "lightgbm" },
-    { name = "numpy" },
-    { name = "pandas" },
     { name = "pwdlib", extra = ["argon2"] },
-    { name = "pyarrow" },
     { name = "pydantic-settings" },
     { name = "pyjwt" },
     { name = "python-multipart" },
     { name = "redis" },
-    { name = "scikit-learn" },
     { name = "sqlalchemy", extra = ["asyncio"] },
-    { name = "statsforecast" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -3135,8 +3129,12 @@ dev = [
     { name = "ruff" },
 ]
 ml = [
+    { name = "lightgbm" },
+    { name = "numpy" },
     { name = "pandas" },
     { name = "pyarrow" },
+    { name = "scikit-learn" },
+    { name = "statsforecast" },
 ]
 
 [package.metadata]
@@ -3146,18 +3144,12 @@ requires-dist = [
     { name = "celery", specifier = ">=5.6.3" },
     { name = "email-validator", specifier = ">=2.3.0" },
     { name = "fastapi", specifier = ">=0.141.1" },
-    { name = "lightgbm", specifier = ">=4.7.0" },
-    { name = "numpy", specifier = ">=2.5.3" },
-    { name = "pandas", specifier = ">=3.0.6" },
     { name = "pwdlib", extras = ["argon2"], specifier = ">=0.3.1" },
-    { name = "pyarrow", specifier = ">=25.0.1" },
     { name = "pydantic-settings", specifier = ">=2.15.0" },
     { name = "pyjwt", specifier = ">=2.14.0" },
     { name = "python-multipart", specifier = ">=0.0.32" },
     { name = "redis", specifier = ">=8.1.0" },
-    { name = "scikit-learn", specifier = ">=1.9.1" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.54" },
-    { name = "statsforecast", specifier = ">=2.0.1" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.53.0" },
 ]
 
@@ -3174,8 +3166,12 @@ dev = [
     { name = "ruff", specifier = ">=0.16.8" },
 ]
 ml = [
+    { name = "lightgbm", specifier = ">=4.7.0" },
+    { name = "numpy", specifier = ">=2.5.3" },
     { name = "pandas", specifier = ">=3.0.6" },
     { name = "pyarrow", specifier = ">=25.0.1" },
+    { name = "scikit-learn", specifier = ">=1.9.1" },
+    { name = "statsforecast", specifier = ">=2.0.1" },
 ]
 
 [[package]]
