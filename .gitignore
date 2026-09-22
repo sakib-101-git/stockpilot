@@ -8,3 +8,4 @@ mlruns/
 *.parquet
 .ipynb_checkpoints/
 mlflow.db
+celerybeat-schedule*
