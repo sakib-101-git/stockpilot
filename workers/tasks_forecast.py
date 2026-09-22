@@ -8,7 +8,6 @@ Price and zero-sale-day simplifications: see app/services/forecast_data.py.
 import uuid
 from datetime import UTC, date, datetime, timedelta
 
-import numpy as np
 import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,12 +16,14 @@ from app.db.models import Forecast, Tenant
 from app.services.forecast_data import load_tenant_history
 from ml.features import calendar_features, training_table
 from ml.lgbm import fit
-from ml.lgbm import forecast as lgbm_forecast
+from ml.lgbm import forecast_future as lgbm_forecast_future
 from ml.quantiles import fit_quantile
 from ml.registry import champion_version, log_and_register, promote_to_champion
 
 HORIZON = 28
 MIN_HISTORY = 56
+DEFAULT_FIRST_ORIGIN = 100
+DEFAULT_STRIDE = 7
 
 
 async def _set_tenant(session: AsyncSession, tenant_id: uuid.UUID) -> None:
@@ -49,24 +50,14 @@ def align_calendar(calendar_path, first_day: date, n_days: int) -> pd.DataFrame:
     return aligned
 
 
-def eligible_product_ids(
-    values: np.ndarray, product_ids: list[uuid.UUID], origin: int, min_history: int
-) -> list[uuid.UUID]:
-    """Product ids with at least min_history observed days by origin, in the
-    same row order forecast() uses internally, so results line up correctly.
-    """
-    observed = ~np.isnan(values[:, :origin])
-    first_day = np.where(observed.any(axis=1), observed.argmax(axis=1) + 1, np.inf)
-    keep = np.flatnonzero(first_day <= origin - min_history)
-    return [product_ids[i] for i in keep]
-
-
 async def generate_forecasts_for_tenant(
     session: AsyncSession,
     tenant_id: uuid.UUID,
     calendar_path,
     horizon: int = HORIZON,
     min_history: int = MIN_HISTORY,
+    first_origin: int = DEFAULT_FIRST_ORIGIN,
+    stride: int = DEFAULT_STRIDE,
 ) -> int:
     """Train, register, and forecast for one tenant. Returns the number of
     Forecast rows written. Raises ValueError if there is not enough history.
@@ -78,18 +69,26 @@ async def generate_forecasts_for_tenant(
         raise ValueError(f"tenant {tenant_id} not found")
 
     history = await load_tenant_history(session, tenant_id)
-    if history.n_days < min_history + horizon:
+    required_days = max(min_history, first_origin) + horizon
+    if history.n_days < required_days:
         raise ValueError(
             f"tenant {tenant_id} has {history.n_days} days of history, "
-            f"need at least {min_history + horizon}"
+            f"need at least {required_days}"
         )
 
-    cal = align_calendar(calendar_path, history.first_day, history.n_days)
+    cal_train = align_calendar(calendar_path, history.first_day, history.n_days)
     states = [tenant.state or "CA"] * len(history.product_ids)
 
     origin = history.n_days
     table = training_table(
-        history.values, history.prices, cal, states, cutoff=origin, horizon=horizon
+        history.values,
+        history.prices,
+        cal_train,
+        states,
+        cutoff=origin,
+        horizon=horizon,
+        stride=stride,
+        first_origin=first_origin,
     )
 
     model = fit(table, weighted=True)
@@ -102,27 +101,27 @@ async def generate_forecasts_for_tenant(
     promote_to_champion(version)
     model_version = champion_version()
 
-    point = lgbm_forecast(
-        model, history.values, history.prices, cal, states, origin, horizon, min_history
+    # Calendar for the forecast horizon must extend past the training data's
+    # own range, up to origin + horizon, unlike cal_train above.
+    cal_forecast = align_calendar(calendar_path, history.first_day, history.n_days + horizon)
+
+    point, keep = lgbm_forecast_future(
+        model, history.values, history.prices, cal_forecast, states, origin, horizon, min_history
     )
+
     upper_model = fit_quantile(table, q=0.9, weighted=False)
-    upper = lgbm_forecast(
+    upper, _ = lgbm_forecast_future(
         upper_model,
         history.values,
         history.prices,
-        cal,
+        cal_forecast,
         states,
         origin,
         horizon,
         min_history,
     )
 
-    eligible_ids = eligible_product_ids(history.values, history.product_ids, origin, min_history)
-    if point.shape[0] != len(eligible_ids):
-        raise ValueError(
-            f"forecast produced {point.shape[0]} rows but {len(eligible_ids)} products "
-            "are eligible; row alignment cannot be trusted"
-        )
+    eligible_ids = [history.product_ids[i] for i in keep]
 
     written = 0
     for row_i, product_id in enumerate(eligible_ids):

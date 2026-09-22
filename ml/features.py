@@ -182,3 +182,50 @@ def training_table(
 
     frames = [build_rows(values, prices, cal, states, origin, horizon) for origin in origins]
     return pd.concat(frames, ignore_index=True)
+
+
+def build_forecast_rows(
+    values: np.ndarray,
+    prices: np.ndarray,
+    cal: pd.DataFrame,
+    states: list[str],
+    origin: int,
+    horizon: int = 28,
+) -> pd.DataFrame:
+    """Like build_rows, but for genuine future forecasting: no `y` column,
+    and target days may extend beyond what `values`/`prices` cover, since
+    the whole point is predicting days that have not happened yet.
+
+    `cal` must still have entries for every target day (origin+1..origin+horizon).
+    `prices` for target days beyond the array's width use the last known
+    price for that series (held constant), since we have no future price data.
+    """
+    base = origin_features(values, origin)
+    base["series_idx"] = np.arange(len(base))
+    last_price = _last_known(prices[:, :origin])
+    snap_by_state = {state: cal[f"snap_{state}"].to_numpy() for state in set(states)}
+    snap = np.stack([snap_by_state[state] for state in states])
+
+    frames = []
+    for h in range(1, horizon + 1):
+        day = origin + h
+        frame = base.copy()
+        wd_mean = same_weekday_mean(values, origin, h)
+        frame["wd_mean_4"] = wd_mean
+        frame["wd_ratio"] = _divide(wd_mean, base["mean_28"].to_numpy())
+        frame["origin"] = origin
+        frame["target_day"] = day
+        frame["h"] = h
+        frame["dow"] = cal.at[day, "dow"]
+        frame["month"] = cal.at[day, "month"]
+        frame["event"] = cal.at[day, "event"]
+        frame["snap"] = snap[:, day - 1]
+        if day - 1 < prices.shape[1]:
+            frame["price"] = prices[:, day - 1]
+        else:
+            frame["price"] = last_price
+        frame["price_ratio"] = frame["price"] / last_price
+        frames.append(frame)
+
+    rows = pd.concat(frames, ignore_index=True)
+    return rows[rows["history_days"].notna()].reset_index(drop=True)

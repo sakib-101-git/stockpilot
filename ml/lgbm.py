@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 
 from ml.backtest import HORIZON, MIN_HISTORY, split_fold
-from ml.features import FEATURE_COLUMNS, build_rows, training_table
+from ml.features import FEATURE_COLUMNS, build_forecast_rows, build_rows, training_table
 from ml.metrics import bias, mae, mase, rmse, rmsse
 
 CATEGORICAL = ["dow", "month", "event"]
@@ -109,3 +109,33 @@ def backtest(
             }
         )
     return pd.DataFrame(results)
+
+
+def forecast_future(
+    model: lgb.LGBMRegressor,
+    values: np.ndarray,
+    prices: np.ndarray,
+    cal: pd.DataFrame,
+    states: list[str],
+    origin: int,
+    horizon: int = HORIZON,
+    min_history: int = MIN_HISTORY,
+) -> tuple[np.ndarray, list[int]]:
+    """Forecast horizon days beyond `origin`, for days with no ground truth yet.
+
+    Unlike forecast(), does not require values/prices to extend past origin.
+    Returns the forecast grid and the row indices (into values/prices) that
+    were eligible and forecast, in the same order as the grid's rows.
+    """
+    observed = ~np.isnan(values[:, :origin])
+    first_day = np.where(observed.any(axis=1), observed.argmax(axis=1) + 1, np.inf)
+    keep = np.flatnonzero(first_day <= origin - min_history)
+
+    rows = build_forecast_rows(values, prices, cal, states, origin=origin, horizon=horizon)
+    rows = rows[rows["series_idx"].isin(keep)]
+    predicted = np.clip(model.predict(rows[FEATURE_COLUMNS]), 0, None)
+
+    grid = pd.DataFrame(
+        {"series_idx": rows["series_idx"].to_numpy(), "h": rows["h"].to_numpy(), "p": predicted}
+    ).pivot(index="series_idx", columns="h", values="p")
+    return grid.loc[keep].to_numpy(), list(keep)
