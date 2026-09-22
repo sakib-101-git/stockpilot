@@ -1,6 +1,7 @@
 """Background import tasks."""
 
 import asyncio
+import concurrent.futures
 import uuid
 
 from workers.celery_app import celery_app
@@ -12,15 +13,44 @@ def ping() -> str:
     return "pong"
 
 
+def _run_async(coro):
+    """Run an async function whether or not an event loop is already active.
+
+    In production (a real Celery worker), there is no running loop, so
+    asyncio.run() works normally. In tests, task_always_eager executes the
+    task inline inside pytest-asyncio's loop, so the coroutine is run on a
+    separate thread instead, to avoid nesting event loops.
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        asyncio.run(coro)
+        return
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        pool.submit(asyncio.run, coro).result()
+
+
 @celery_app.task(name="workers.run_product_import")
-def run_product_import(job_id: str, file_path: str) -> None:
+def run_product_import(job_id: str, tenant_id: str, file_path: str) -> None:
     """Entry point Celery calls. Bridges into the async import logic."""
-    asyncio.run(_run_product_import_async(job_id, file_path))
+    _run_async(_run_product_import_async(job_id, tenant_id, file_path))
 
 
-async def _run_product_import_async(job_id: str, file_path: str) -> None:
-    from app.db.session import SessionLocal
+async def _run_product_import_async(job_id: str, tenant_id: str, file_path: str) -> None:
+    """Each task execution gets its own engine, scoped to its own event loop —
+    the shared app engine's connections are bound to whichever loop created
+    them, so reusing it across threads/loops causes silent failures.
+    """
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    from app.core.config import settings
     from app.services.import_runner import run_import
 
-    async with SessionLocal() as session:
-        await run_import(session, uuid.UUID(job_id), file_path)
+    engine = create_async_engine(settings.database_url, pool_pre_ping=True)
+    try:
+        session_maker = async_sessionmaker(engine, expire_on_commit=False)
+        async with session_maker() as session:
+            await run_import(session, uuid.UUID(job_id), uuid.UUID(tenant_id), file_path)
+    finally:
+        await engine.dispose()

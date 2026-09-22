@@ -20,3 +20,6 @@ fmt:
 
 migrate:
 	uv run alembic upgrade head
+
+worker:
+	uv run celery -A workers.celery_app worker --loglevel=info

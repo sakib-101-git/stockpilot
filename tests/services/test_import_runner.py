@@ -36,7 +36,7 @@ async def test_valid_file_creates_products_and_marks_succeeded(
 
     maker = async_sessionmaker(db_engine, expire_on_commit=False)
     async with maker() as session:
-        await run_import(session, job_id, str(csv_path))
+        await run_import(session, job_id, tenant_id, str(csv_path))
 
     job = await _get_job(db_engine, job_id)
     assert job.status == ImportStatus.SUCCEEDED
@@ -62,7 +62,7 @@ async def test_file_with_only_bad_rows_is_marked_failed(
 
     maker = async_sessionmaker(db_engine, expire_on_commit=False)
     async with maker() as session:
-        await run_import(session, job_id, str(csv_path))
+        await run_import(session, job_id, tenant_id, str(csv_path))
 
     job = await _get_job(db_engine, job_id)
     assert job.status == ImportStatus.FAILED
@@ -86,7 +86,7 @@ async def test_sku_already_in_database_is_reported_as_an_error(
     csv_path.write_text("sku,name\nA1,Widget\nB2,Gadget\n")
 
     async with maker() as session:
-        await run_import(session, job_id, str(csv_path))
+        await run_import(session, job_id, tenant_id, str(csv_path))
 
     job = await _get_job(db_engine, job_id)
     assert job.status == ImportStatus.SUCCEEDED
@@ -112,7 +112,7 @@ async def test_products_land_in_the_correct_tenant_only(
 
     maker = async_sessionmaker(db_engine, expire_on_commit=False)
     async with maker() as session:
-        await run_import(session, job_id, str(csv_path))
+        await run_import(session, job_id, tenant_a, str(csv_path))
 
     async with maker() as session:
         result_a = await session.execute(select(Product).where(Product.tenant_id == tenant_a))
@@ -130,7 +130,7 @@ async def test_missing_file_marks_the_job_failed_without_raising(
 
     maker = async_sessionmaker(db_engine, expire_on_commit=False)
     async with maker() as session:
-        await run_import(session, job_id, "/nonexistent/path.csv")
+        await run_import(session, job_id, tenant_id, "/nonexistent/path.csv")
 
     job = await _get_job(db_engine, job_id)
     assert job.status == ImportStatus.FAILED
