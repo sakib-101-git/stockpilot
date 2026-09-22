@@ -6,7 +6,7 @@ AI-powered inventory and demand platform: probabilistic demand forecasting,
 order recommendations, and an explainable assistant, built with Python and
 FastAPI.
 
-**Status:** under construction (Weeks 1, 2, 3, 5, 6 and 7 done; 4 next).
+**Status:** under construction (Weeks 1, 2, 3, 4, 5, 6 and 7 done; 8 next).
 
 ## What works so far
 
@@ -26,6 +26,12 @@ FastAPI.
   the M5 source data. Separate Docker images for the API and worker keep
   ML libraries (lightgbm, scikit-learn, statsforecast) out of the API's
   deployed image.
+- Live sales pipeline: a Redis Streams consumer turns sales events into
+  stock_movements rows, with idempotent processing (a redelivered event is
+  never double-counted), bounded retries, and a dead-letter stream for
+  events that keep failing. A replay script simulates a live feed from the
+  M5 sample's historical sales, since no real point-of-sale integration
+  exists. Details in `docs/decisions/0008-redis-streams-consumer.md`.
 - Forecasting: rolling-origin backtest (six folds, 28-day horizon, two
   Christmas windows) with leakage tests. A weighted LightGBM matches the best
   statistical baselines on RMSSE (0.712 against 0.709 for AutoETS) and cuts
@@ -60,10 +66,16 @@ To also run the background worker (needed for CSV import):
 make worker
 ```
 
-To run the API and worker as Docker containers instead of locally:
+To run the stream consumer (needed for the live sales pipeline):
 
 ```bash
-docker compose up -d api worker
+uv run python -m workers.stream_consumer
+```
+
+To replay the M5 sample as simulated live sales:
+
+```bash
+uv run python -m scripts.synth.replay --limit 100
 ```
 
 The containerized API is served on http://localhost:8001.
