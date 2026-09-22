@@ -6,7 +6,7 @@ AI-powered inventory and demand platform: probabilistic demand forecasting,
 order recommendations, and an explainable assistant, built with Python and
 FastAPI.
 
-**Status:** under construction (Weeks 1, 2, 3, 4, 5, 6 and 7 done; 8 next).
+**Status:** under construction (Weeks 1-8 done; 9 next).
 
 ## What works so far
 
@@ -43,6 +43,15 @@ FastAPI.
   history-based bound over six folds, and 9.6% of outcomes exceed it (target
   10%). For medium and slow series the lower end is zero, so it is a one-sided
   bound. A separate fallback handles products with little history.
+- Nightly forecast generation: a Celery Beat schedule trains and forecasts
+  from each tenant's real, event-sourced `stock_movements` history (not the
+  static M5 sample), registers and versions every model via MLflow, and
+  writes the results to a `forecasts` table that keeps history rather than
+  overwriting it. Served through the API (`GET /products/{id}/forecast`,
+  `GET /forecasts/summary`), with an on-demand SHAP explanation endpoint
+  (`GET /products/{id}/forecast/{date}/explain`) showing which features
+  drove a given prediction. Details in
+  `docs/decisions/0009-nightly-forecast-generation.md`.
 - Alembic migrations, and a test suite that runs against a real Postgres.
 - CI on every push: lint, formatting, and tests with Postgres and Redis.
 
@@ -60,10 +69,16 @@ make run       # start the API on http://localhost:8000
 
 Open http://localhost:8000/docs for the interactive API docs.
 
-To also run the background worker (needed for CSV import):
+To also run the background worker (needed for CSV import and forecasting):
 
 ```bash
 make worker
+```
+
+To run the nightly forecast scheduler:
+
+```bash
+uv run celery -A workers.celery_app beat --loglevel=info
 ```
 
 To run the stream consumer (needed for the live sales pipeline):
@@ -76,6 +91,12 @@ To replay the M5 sample as simulated live sales:
 
 ```bash
 uv run python -m scripts.synth.replay --limit 100
+```
+
+To run the API and worker as Docker containers instead of locally:
+
+```bash
+docker compose up -d api worker
 ```
 
 The containerized API is served on http://localhost:8001.
