@@ -1,6 +1,22 @@
+from app.db.models.batch import Batch
+from app.db.models.import_job import ImportJob, ImportStatus
 from app.db.models.product import Product
+from app.db.models.stock import MovementType, StockMovement
 from app.db.models.supplier import Supplier
+from app.db.models.supplier_link import ProductSupplier
 from app.db.models.tenant import Tenant
 from app.db.models.user import Role, User
 
-__all__ = ["Product", "Role", "Supplier", "Tenant", "User"]
+__all__ = [
+    "Batch",
+    "ImportJob",
+    "ImportStatus",
+    "MovementType",
+    "Product",
+    "ProductSupplier",
+    "Role",
+    "StockMovement",
+    "Supplier",
+    "Tenant",
+    "User",
+]
