@@ -1,4 +1,6 @@
 import uuid
+from datetime import date
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -8,8 +10,11 @@ from app.api.deps import get_current_user
 from app.db.models import Forecast, Product, User
 from app.db.session import get_session
 from app.schemas.forecast import ForecastDay, ForecastSummaryRow
+from ml.explain import explain_forecast
 
 router = APIRouter(tags=["forecasts"])
+
+CALENDAR_PATH = Path(__file__).resolve().parents[2] / "data" / "processed" / "calendar.parquet"
 
 
 @router.get("/products/{product_id}/forecast", response_model=list[ForecastDay])
@@ -79,3 +84,26 @@ async def get_forecast_summary(
         seen.add(row.product_id)
         summary.append(row)
     return summary
+
+
+@router.get("/products/{product_id}/forecast/{target_date}/explain")
+async def explain_product_forecast(
+    product_id: uuid.UUID,
+    target_date: date,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[dict]:
+    """Why the model predicted this number for this product and day.
+
+    Rebuilds the tenant's full history and re-runs SHAP on demand rather
+    than reading a pre-stored value. On real data this takes roughly 2-3
+    seconds (dominated by rebuilding history from stock_movements), which
+    is acceptable for a deliberate "explain this" click but too slow to
+    include in a list endpoint. Not optimized in Week 8's scope.
+    """
+    try:
+        return await explain_forecast(
+            session, current_user.tenant_id, product_id, target_date, CALENDAR_PATH
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
