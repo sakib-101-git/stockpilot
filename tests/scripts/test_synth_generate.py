@@ -77,3 +77,21 @@ def test_generation_is_reproducible_with_the_same_seed() -> None:
     assert [link.lead_time_days_mean for link in links1] == [
         link.lead_time_days_mean for link in links2
     ]
+
+
+def test_summarize_products_averages_per_store_and_item() -> None:
+    sales = pd.DataFrame(
+        {
+            "store_id": ["CA_1", "CA_1", "CA_1", "TX_1"],
+            "item_id": ["A", "A", "B", "A"],
+            "cat_id": ["FOODS", "FOODS", "HOBBIES", "FOODS"],
+            "sell_price": [1.0, 3.0, 5.0, 2.0],
+            "units": [2, 4, 0, 10],
+        }
+    )
+    summary = summarize_products(sales).set_index(["store_id", "sku"])
+
+    assert summary.loc[("CA_1", "A"), "avg_price"] == pytest.approx(2.0)
+    assert summary.loc[("CA_1", "A"), "avg_daily_units"] == pytest.approx(3.0)
+    assert summary.loc[("CA_1", "B"), "cat_id"] == "HOBBIES"
+    assert summary.loc[("TX_1", "A"), "avg_price"] == pytest.approx(2.0)

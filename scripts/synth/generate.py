@@ -126,3 +126,17 @@ def plan_batches(
             )
         )
     return plans
+
+
+def summarize_products(sales: pd.DataFrame) -> pd.DataFrame:
+    """One row per product-in-store: sku, category, average price and average daily units.
+
+    `sku` matches the item_id used elsewhere (it is unique within a store, not globally).
+    """
+    summary = (
+        sales.groupby(["store_id", "item_id", "cat_id"])
+        .agg(avg_price=("sell_price", "mean"), avg_daily_units=("units", "mean"))
+        .reset_index()
+    )
+    summary["sku"] = summary["item_id"]
+    return summary[["store_id", "sku", "cat_id", "avg_price", "avg_daily_units"]]
