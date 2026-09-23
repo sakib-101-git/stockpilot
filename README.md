@@ -6,7 +6,7 @@ An AI-powered inventory and demand platform for small retailers: probabilistic
 demand forecasting, budget-constrained reorder recommendations, and an
 explainable assistant, built with Python and FastAPI.
 
-**Status:** under construction (Weeks 1-10 done; 11 next).
+**Status:** under construction (Weeks 1-11 done; 12 next).
 
 ## What it does
 
@@ -14,10 +14,11 @@ Stockpilot ingests a shop's sales as they happen, forecasts demand per
 product 28 days out with calibrated uncertainty, and turns those forecasts
 into concrete purchasing decisions: when to reorder, how much, and, when
 budget is limited, which products to prioritize. A human stays in the loop
-to approve, edit, or reject every suggested order before it's acted on.
-Every part of the pipeline is tenant-isolated, tested against a real
-Postgres and Redis, and built to be explainable rather than a black box —
-and its value is checked against a simple baseline, not just assumed.
+to approve, edit, or reject every suggested order before it's acted on, all
+from a working dashboard. Every part of the pipeline is tenant-isolated,
+tested against a real Postgres and Redis, and built to be explainable
+rather than a black box — and its value is checked against a simple
+baseline, not just assumed.
 
 ## What works so far
 
@@ -95,6 +96,15 @@ genuine cold-start case with almost no history to learn from. Full
 methodology and results in `docs/experiments.md` and
 `docs/decisions/0011-policy-simulation.md`.
 
+**Dashboard.** A Streamlit app gives every part of the pipeline a real,
+working screen: sign in, see what needs attention, view a product's 28-day
+forecast chart with an on-demand explanation of what drove it, and
+generate, approve, edit, or reject purchasing recommendations. It's a thin
+client with no logic of its own — every page calls the same tested API
+endpoints described above — which keeps the door open to a different,
+more polished frontend later without touching the backend at all. Details
+in `docs/decisions/0012-streamlit-dashboard.md`.
+
 **Infrastructure.** Alembic migrations, a test suite that runs against a
 real Postgres and Redis rather than mocks, and CI on every push covering
 linting, formatting, and the full test suite.
@@ -112,6 +122,15 @@ make run       # start the API on http://localhost:8000
 ```
 
 Open http://localhost:8000/docs for the interactive API docs.
+
+To run the dashboard:
+
+```bash
+cd dashboard
+uv run streamlit run app.py
+```
+
+Open http://localhost:8501 and sign in with an existing account.
 
 To also run the background worker (needed for CSV import and forecasting):
 
