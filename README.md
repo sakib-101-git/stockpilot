@@ -6,16 +6,18 @@ An AI-powered inventory and demand platform for small retailers: probabilistic
 demand forecasting, budget-constrained reorder recommendations, and an
 explainable assistant, built with Python and FastAPI.
 
-**Status:** under construction (Weeks 1-9 done; 10 next).
+**Status:** under construction (Weeks 1-10 done; 11 next).
 
 ## What it does
 
 Stockpilot ingests a shop's sales as they happen, forecasts demand per
 product 28 days out with calibrated uncertainty, and turns those forecasts
 into concrete purchasing decisions: when to reorder, how much, and, when
-budget is limited, which products to prioritize. Every part of that
-pipeline is tenant-isolated, tested against a real Postgres and Redis, and
-built to be explainable rather than a black box.
+budget is limited, which products to prioritize. A human stays in the loop
+to approve, edit, or reject every suggested order before it's acted on.
+Every part of the pipeline is tenant-isolated, tested against a real
+Postgres and Redis, and built to be explainable rather than a black box —
+and its value is checked against a simple baseline, not just assumed.
 
 ## What works so far
 
@@ -73,6 +75,25 @@ budget is limited, a 0/1 knapsack solved with OR-Tools chooses which
 products to fully reorder to maximize stockout-risk coverage within that
 budget (`GET /optimize-budget`). Details in
 `docs/decisions/0010-reorder-optimizer.md`.
+
+**Approval workflow.** The optimizer's suggestions are persisted, not just
+returned and forgotten. An owner can approve, edit, or reject each one
+(`POST /recommendations/generate`, `GET /recommendations/pending`,
+`POST /recommendations/{id}/approve|edit|reject`), with a full audit trail
+of who decided what and when. Regenerating recommendations automatically
+supersedes stale, still-pending ones from an earlier run rather than
+letting them pile up alongside fresh suggestions.
+
+**Policy simulation.** Does the forecast-driven approach actually beat a
+simple rule? Fifteen real products, stratified across slow/medium/fast
+sellers and all three stores, were replayed through a day-by-day simulated
+shop under two policies that differ in exactly one way: what estimates
+demand. The forecast-driven policy had 65% fewer stockout-days and 58%
+less unmet demand than a 28-day moving-average baseline over the same real
+year of sales, winning on 14 of 15 products — the one exception is a
+genuine cold-start case with almost no history to learn from. Full
+methodology and results in `docs/experiments.md` and
+`docs/decisions/0011-policy-simulation.md`.
 
 **Infrastructure.** Alembic migrations, a test suite that runs against a
 real Postgres and Redis rather than mocks, and CI on every push covering
@@ -149,10 +170,18 @@ uv run python -m scripts.synth.load_products
 uv run python -m scripts.synth.seed
 ```
 
+To run the policy simulation and compare the forecast-driven reorder
+policy against the naive baseline (real historical data, takes roughly
+10 minutes since it retrains 13 times across the simulated year):
+
+```bash
+uv run python -m scripts.run_simulation
+```
+
 ## Design decisions
 
 See [`docs/decisions/`](docs/decisions/) for short notes on the main
 technical choices and their trade-offs, including where the current data
 has known, stated limitations, and
-[`docs/experiments.md`](docs/experiments.md) for the full forecasting
-experiment log.
+[`docs/experiments.md`](docs/experiments.md) for the full forecasting and
+simulation results.
