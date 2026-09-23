@@ -13,6 +13,7 @@ class RecommendationStatus(enum.StrEnum):
     APPROVED = "approved"
     EDITED = "edited"
     REJECTED = "rejected"
+    SUPERSEDED = "superseded"
 
 
 class OrderRecommendation(Base):

@@ -35,10 +35,29 @@ async def generate_recommendations(
     session: AsyncSession, tenant_id: uuid.UUID, budget: float
 ) -> list[OrderRecommendation]:
     """Runs the optimizer and persists each chosen order as a pending
-    recommendation. Does not touch previously generated recommendations.
+    recommendation.
+
+    Any existing pending recommendation for a product in this new batch is
+    marked superseded first, so re-running generate does not silently pile
+    up stale suggestions alongside fresh ones for the same product.
+    Superseded is distinct from rejected: rejected means a person decided
+    against the order; superseded means a newer run replaced it before
+    anyone acted.
     """
     await _set_tenant(session, tenant_id)
     result = await optimize_budget(session, tenant_id, budget)
+
+    product_ids = [order.product_id for order in result.orders]
+    if product_ids:
+        stale = await session.execute(
+            select(OrderRecommendation).where(
+                OrderRecommendation.tenant_id == tenant_id,
+                OrderRecommendation.product_id.in_(product_ids),
+                OrderRecommendation.status == RecommendationStatus.PENDING,
+            )
+        )
+        for old_row in stale.scalars().all():
+            old_row.status = RecommendationStatus.SUPERSEDED
 
     rows = []
     for order in result.orders:

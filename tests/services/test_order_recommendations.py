@@ -4,7 +4,7 @@ from datetime import UTC, date, datetime
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
-from app.db.models import Forecast, Product, ProductSupplier, Supplier
+from app.db.models import Forecast, OrderRecommendation, Product, ProductSupplier, Supplier
 from app.services.order_recommendations import (
     approve_recommendation,
     edit_recommendation,
@@ -187,3 +187,42 @@ async def test_acting_on_another_tenants_recommendation_raises(
     async with maker() as session:
         with pytest.raises(ValueError, match="not found"):
             await approve_recommendation(session, tenant_b, rows[0].id, user_b)
+
+
+async def test_regenerating_supersedes_stale_pending_rows_for_the_same_products(
+    client, db_engine: AsyncEngine
+) -> None:
+    tenant_id, _ = await _make_tenant_with_user(db_engine, client)
+    await _make_reorderable_product(db_engine, tenant_id)
+
+    maker = async_sessionmaker(db_engine, expire_on_commit=False)
+    async with maker() as session:
+        first_batch = await generate_recommendations(session, tenant_id, budget=1000.0)
+    async with maker() as session:
+        second_batch = await generate_recommendations(session, tenant_id, budget=1000.0)
+
+    async with maker() as session:
+        first_row = await session.get(OrderRecommendation, first_batch[0].id)
+        second_row = await session.get(OrderRecommendation, second_batch[0].id)
+
+    assert first_row.status == "superseded"
+    assert second_row.status == "pending"
+
+
+async def test_superseded_rows_do_not_appear_in_pending_list(
+    client, db_engine: AsyncEngine
+) -> None:
+    tenant_id, _ = await _make_tenant_with_user(db_engine, client)
+    await _make_reorderable_product(db_engine, tenant_id)
+
+    maker = async_sessionmaker(db_engine, expire_on_commit=False)
+    async with maker() as session:
+        await generate_recommendations(session, tenant_id, budget=1000.0)
+    async with maker() as session:
+        second_batch = await generate_recommendations(session, tenant_id, budget=1000.0)
+
+    async with maker() as session:
+        pending = await list_pending_recommendations(session, tenant_id)
+
+    assert len(pending) == 1
+    assert pending[0].id == second_batch[0].id
