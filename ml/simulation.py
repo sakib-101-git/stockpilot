@@ -5,6 +5,8 @@ negative and stays in a realistic range, unlike the live-data path's known
 limitation — see docs/decisions/0010-reorder-optimizer.md).
 """
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from ml.quantiles import speed_groups
@@ -64,3 +66,98 @@ def supplier_terms_for_sample(sales_df, series_names: list[str], seed: int = SAM
         if pair in terms_by_pair:
             result[name] = terms_by_pair[pair]
     return result
+
+
+def naive_reorder_point(
+    recent_daily_sales: np.ndarray, lead_time_window_days: int, window: int = 28
+) -> float:
+    """Sum of a simple trailing moving-average daily demand over the
+    lead-time window. The naive counterpart to Stockpilot's upper-bound-
+    based reorder point — same lead-time buffering, no ML. Unlike the
+    forecast-driven policy (frozen between 28-day refreshes), this updates
+    every simulated day, since it costs nothing to recompute.
+    """
+    if len(recent_daily_sales) == 0:
+        return 0.0
+    avg_daily = float(np.mean(recent_daily_sales[-window:]))
+    return avg_daily * lead_time_window_days
+
+
+@dataclass
+class SimulationResult:
+    policy_name: str
+    stockout_days: int
+    total_unmet_demand: float
+    avg_stock: float
+    total_orders_placed: int
+    total_units_ordered: int
+    n_days: int
+
+
+def simulate_policy(
+    daily_sales: np.ndarray,
+    reorder_point_fn,
+    lead_time_days: int,
+    moq: int,
+    pack_size: int,
+    initial_stock: float,
+    policy_name: str = "policy",
+) -> SimulationResult:
+    """Day-by-day simulation: receive any order due today, apply real
+    demand (clipped at available stock, never negative — the shortfall is
+    recorded as unmet demand, not a negative stock balance), then reorder
+    if stock has fallen below reorder_point_fn(day) and no order is
+    currently in transit.
+
+    Only one order may be in transit per product at a time — a second
+    reorder trigger while one is pending is skipped, matching a small shop
+    placing one purchase order at a time per product.
+    """
+    import math
+
+    n_days = len(daily_sales)
+    stock = float(initial_stock)
+    pending_arrival_day: int | None = None
+    pending_qty = 0
+
+    stockout_days = 0
+    total_unmet = 0.0
+    stock_sum = 0.0
+    total_orders = 0
+    total_units_ordered = 0
+
+    for day in range(n_days):
+        if pending_arrival_day == day:
+            stock += pending_qty
+            pending_arrival_day = None
+            pending_qty = 0
+
+        demand = float(daily_sales[day])
+        sold = min(stock, demand)
+        unmet = demand - sold
+        stock -= sold
+        if unmet > 1e-9:
+            stockout_days += 1
+            total_unmet += unmet
+
+        stock_sum += stock
+
+        reorder_point = reorder_point_fn(day)
+        if stock < reorder_point and pending_arrival_day is None:
+            raw_need = max(0.0, reorder_point - stock)
+            packs_needed = math.ceil(raw_need / pack_size) if raw_need > 0 else 0
+            qty = max(packs_needed * pack_size, moq)
+            pending_arrival_day = day + lead_time_days
+            pending_qty = qty
+            total_orders += 1
+            total_units_ordered += qty
+
+    return SimulationResult(
+        policy_name=policy_name,
+        stockout_days=stockout_days,
+        total_unmet_demand=round(total_unmet, 2),
+        avg_stock=round(stock_sum / n_days, 2) if n_days else 0.0,
+        total_orders_placed=total_orders,
+        total_units_ordered=total_units_ordered,
+        n_days=n_days,
+    )

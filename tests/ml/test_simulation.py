@@ -61,3 +61,43 @@ def test_supplier_terms_handles_same_sku_in_different_stores() -> None:
     tx_cost = terms["TX_1/FOODS_1_001"].unit_cost
     # Different avg_price per store (2.0 vs 3.0) must produce different costs
     assert ca_cost != tx_cost
+
+
+def test_simulate_policy_matches_hand_traced_scenario() -> None:
+    from ml.simulation import simulate_policy
+
+    daily_sales = np.array([5.0] * 10)
+    result = simulate_policy(
+        daily_sales,
+        reorder_point_fn=lambda day: 10.0,
+        lead_time_days=2,
+        moq=1,
+        pack_size=1,
+        initial_stock=20.0,
+        policy_name="test",
+    )
+
+    assert result.stockout_days == 2
+    assert result.total_unmet_demand == 10.0
+    assert result.avg_stock == 3.5
+    assert result.total_orders_placed == 4
+    assert result.total_units_ordered == 30
+
+
+def test_simulate_policy_never_stocks_out_with_ample_initial_stock_and_no_reorder_needed() -> None:
+    from ml.simulation import simulate_policy
+
+    daily_sales = np.array([1.0] * 20)
+    result = simulate_policy(
+        daily_sales,
+        reorder_point_fn=lambda day: 0.0,
+        lead_time_days=3,
+        moq=1,
+        pack_size=1,
+        initial_stock=1000.0,
+        policy_name="test",
+    )
+
+    assert result.stockout_days == 0
+    assert result.total_unmet_demand == 0.0
+    assert result.total_orders_placed == 0
