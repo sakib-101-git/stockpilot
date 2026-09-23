@@ -101,3 +101,47 @@ def test_simulate_policy_never_stocks_out_with_ample_initial_stock_and_no_reorde
     assert result.stockout_days == 0
     assert result.total_unmet_demand == 0.0
     assert result.total_orders_placed == 0
+
+
+def test_build_forecast_reorder_fn_uses_the_correct_horizon_day() -> None:
+    from ml.simulation import build_forecast_reorder_fn
+
+    # Refresh 0 forecasts days 1..5 as [10, 20, 30, 40, 50].
+    # lead_time_window=2, so day 0 since refresh sums forecast[0:2] = 10+20=30.
+    refresh_upper = {0: np.array([10.0, 20.0, 30.0, 40.0, 50.0])}
+    fn = build_forecast_reorder_fn(refresh_upper, lead_time_window=2, refresh_every=5)
+
+    assert fn(0) == 30.0  # forecast[0:2]
+    assert fn(1) == 50.0  # forecast[1:3] = 20+30
+    assert fn(2) == 70.0  # forecast[2:4] = 30+40
+
+
+def test_build_forecast_reorder_fn_moves_to_the_next_refresh_correctly() -> None:
+    from ml.simulation import build_forecast_reorder_fn
+
+    refresh_upper = {
+        0: np.array([10.0, 10.0, 10.0, 10.0, 10.0]),
+        1: np.array([99.0, 99.0, 99.0, 99.0, 99.0]),
+    }
+    fn = build_forecast_reorder_fn(refresh_upper, lead_time_window=1, refresh_every=5)
+
+    assert fn(4) == 10.0  # last day of refresh 0's window
+    assert fn(5) == 99.0  # sim_day 5 -> refresh_idx 1, day_since_refresh 0
+
+
+def test_build_forecast_reorder_fn_clamps_at_the_end_of_the_forecast_array() -> None:
+    from ml.simulation import build_forecast_reorder_fn
+
+    # lead_time_window=3 but only 2 days remain in the forecast window;
+    # should sum what's available, not index out of range.
+    refresh_upper = {0: np.array([5.0, 5.0, 5.0])}
+    fn = build_forecast_reorder_fn(refresh_upper, lead_time_window=3, refresh_every=3)
+
+    assert fn(1) == 10.0  # forecast[1:4] clamped to forecast[1:3] = indices 1,2 = 5.0+5.0
+
+
+def test_build_forecast_reorder_fn_returns_zero_for_a_missing_refresh() -> None:
+    from ml.simulation import build_forecast_reorder_fn
+
+    fn = build_forecast_reorder_fn({}, lead_time_window=2, refresh_every=5)
+    assert fn(0) == 0.0

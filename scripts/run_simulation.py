@@ -17,6 +17,7 @@ from ml.lgbm import forecast_future as lgbm_forecast_future
 from ml.quantiles import fit_quantile
 from ml.simulation import (
     N_PER_TIER,
+    build_forecast_reorder_fn,
     naive_reorder_point,
     select_stratified_sample,
     simulate_policy,
@@ -27,30 +28,6 @@ ROOT = Path(__file__).resolve().parents[1]
 REFRESH_EVERY = 28
 SIM_DAYS = 365
 MIN_HISTORY = 56
-
-
-def build_forecast_reorder_fn(
-    refresh_upper_bounds: dict, lead_time_window: int, refresh_every: int
-):
-    """Stitches per-refresh 28-day upper-bound forecasts into one function
-    covering the whole simulation: day d since a refresh uses that
-    refresh's forecast for horizon day (d % refresh_every), summed over
-    the next lead_time_window forecasted days from that point.
-    """
-
-    def reorder_point_fn(sim_day: int) -> float:
-        refresh_idx = sim_day // refresh_every
-        day_since_refresh = sim_day % refresh_every
-        upper = refresh_upper_bounds.get(refresh_idx)
-        if upper is None:
-            return 0.0
-        start = day_since_refresh
-        end = min(start + lead_time_window, len(upper))
-        if start >= len(upper):
-            return float(upper[-1]) * lead_time_window
-        return float(np.sum(upper[start:end]))
-
-    return reorder_point_fn
 
 
 def main() -> None:
