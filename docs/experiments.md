@@ -114,3 +114,57 @@ New-product rules confirmed on the scoring folds: the own-history mean beats
 peer blending at 7, 14 and 28 days (RMSSE 0.749, 0.730, 0.720). Upper bound
 miss rate at 7 days: 0.140 own history, 0.068 peer shape. LightGBM on unseen
 series moved from 0.816 (validation) to 0.944 at 7 days; not investigated.
+## Policy simulation: forecast-driven reorder vs. naive moving average
+
+Rule set before the run: the forecast-driven policy counts as better if it
+has meaningfully fewer stockout-days than the naive baseline across the
+sample.
+
+Method: 15 real M5 products, 5 each from the slow/medium/fast speed tiers
+(`ml.quantiles.speed_groups`), selected by a fixed random seed within each
+tier rather than by position, after an initial version of the selection
+rule ("lowest index per tier") turned out to be biased toward one store and
+one category and was corrected. Both policies use the same reorder
+mechanism (lead-time-buffered reorder point, MOQ/pack-size rounding) and
+face identical real historical demand for each product; the only
+difference is what estimates the reorder point. The forecast-driven policy
+retrains a LightGBM point model and a quantile-90 model on the full
+~450-series grid every 28 days (13 refreshes across the 365-day window) and
+sums the quantile-90 forecast over the lead-time window, using the correct
+horizon day of that refresh's 28-day forecast for however long it has been
+since the last refresh. The naive policy sums a 28-day trailing moving
+average of real sales over the same lead-time window, recomputed every
+simulated day. Opening stock for each product is set from its own recent
+average daily demand; a product with no real sales in the 28 days before
+the simulation window falls back to zero average demand for that
+calculation rather than producing a NaN that silently corrupts its whole
+simulated run — found and fixed after a first run silently zeroed out one
+product's stockout tracking this way.
+
+| policy | total stockout-days | total unmet demand | avg stock |
+|---|---|---|---|
+| forecast-driven | 129 | 746.0 | 19.9 |
+| naive moving average | 368 | 1794.5 | 11.3 |
+
+The forecast-driven policy has 65% fewer stockout-days and 58% less unmet
+demand than the naive baseline over the same real year of demand, while
+holding roughly 76% more average stock (19.9 vs 11.3) — some of the
+improvement is bought with more inventory on hand, not purely better
+timing, and this trade-off is not decomposed further here.
+
+The forecast-driven policy wins on 14 of 15 products. The one exception,
+`WI_1/FOODS_2_147`, has essentially no real sales in the 28 days before the
+simulation window begins — the same product that exposed the NaN bug above
+— and the naive policy's simpler, always-available moving average handled
+that thin-history case better (19 stockout-days against 34). Consistent
+with the cold-start findings elsewhere in this log: a model with too little
+recent history to learn from is not guaranteed to beat a simple baseline,
+and this simulation did not special-case that condition the way
+`ml/coldstart.py` does for point forecasts.
+
+Limits: one run, one 365-day window, one random seed for product selection;
+run-to-run variance across seeds was not measured. The naive baseline
+updates its estimate every simulated day while the forecast-driven policy's
+estimate is frozen between 28-day refreshes — a real asymmetry in the
+naive baseline's favor that the result still overcomes. Holding cost is
+approximated only as average stock on hand, not priced in actual currency.
