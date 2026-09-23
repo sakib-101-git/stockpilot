@@ -1,10 +1,11 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_owner
-from app.db.models import User
+from app.db.models import Product, User
 from app.db.session import get_session
 from app.schemas.order_recommendation import (
     EditRecommendationRequest,
@@ -40,7 +41,28 @@ async def get_pending_recommendations(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    return await list_pending_recommendations(session, current_user.tenant_id)
+    rows = await list_pending_recommendations(session, current_user.tenant_id)
+    product_ids = [row.product_id for row in rows]
+    skus: dict[uuid.UUID, str] = {}
+    if product_ids:
+        result = await session.execute(select(Product).where(Product.id.in_(product_ids)))
+        skus = {p.id: p.sku for p in result.scalars().all()}
+
+    return [
+        OrderRecommendationOut(
+            id=row.id,
+            product_id=row.product_id,
+            sku=skus.get(row.product_id),
+            suggested_quantity=row.suggested_quantity,
+            suggested_cost=float(row.suggested_cost),
+            status=row.status,
+            final_quantity=row.final_quantity,
+            decided_by=row.decided_by,
+            decided_at=row.decided_at,
+            created_at=row.created_at,
+        )
+        for row in rows
+    ]
 
 
 @router.post("/recommendations/{recommendation_id}/approve", response_model=OrderRecommendationOut)

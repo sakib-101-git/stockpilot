@@ -9,6 +9,7 @@ class OrderRecommendationOut(BaseModel):
 
     id: uuid.UUID
     product_id: uuid.UUID
+    sku: str | None = None
     suggested_quantity: int
     suggested_cost: float
     status: str
