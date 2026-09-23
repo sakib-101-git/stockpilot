@@ -2,62 +2,85 @@
 
 ![CI](https://github.com/sakib-101-git/stockpilot/actions/workflows/ci.yml/badge.svg)
 
-AI-powered inventory and demand platform: probabilistic demand forecasting,
-order recommendations, and an explainable assistant, built with Python and
-FastAPI.
+An AI-powered inventory and demand platform for small retailers: probabilistic
+demand forecasting, budget-constrained reorder recommendations, and an
+explainable assistant, built with Python and FastAPI.
 
-**Status:** under construction (Weeks 1-8 done; 9 next).
+**Status:** under construction (Weeks 1-9 done; 10 next).
+
+## What it does
+
+Stockpilot ingests a shop's sales as they happen, forecasts demand per
+product 28 days out with calibrated uncertainty, and turns those forecasts
+into concrete purchasing decisions: when to reorder, how much, and, when
+budget is limited, which products to prioritize. Every part of that
+pipeline is tenant-isolated, tested against a real Postgres and Redis, and
+built to be explainable rather than a black box.
 
 ## What works so far
 
-- Multi-tenant API: each shop is a tenant, and each user belongs to one.
-- Registration and login with Argon2 password hashing and JWT access tokens.
-- Roles (owner, staff) enforced on the server, with 401 and 403 kept apart.
-- Tenant-scoped products and suppliers with pagination.
-- Tenant isolation in two layers: query filters in the code, and Postgres
-  row-level security in the database. Tests prove that a forgotten filter
-  cannot leak data.
-- Background jobs: CSV product import runs as a Celery task, not inline in
-  the request. Every row is validated, bad rows are reported individually
-  without blocking good ones, and writes are tenant-scoped through row-level
-  security. Suppliers, costs, lead times, opening stock, and FOODS batch/
-  expiry data are generated synthetically (documented in
-  `docs/decisions/0007-synthetic-supply-data.md`) since none of it exists in
-  the M5 source data. Separate Docker images for the API and worker keep
-  ML libraries (lightgbm, scikit-learn, statsforecast) out of the API's
-  deployed image.
-- Live sales pipeline: a Redis Streams consumer turns sales events into
-  stock_movements rows, with idempotent processing (a redelivered event is
-  never double-counted), bounded retries, and a dead-letter stream for
-  events that keep failing. A replay script simulates a live feed from the
-  M5 sample's historical sales, since no real point-of-sale integration
-  exists. Details in `docs/decisions/0008-redis-streams-consumer.md`.
-- Forecasting: rolling-origin backtest (six folds, 28-day horizon, two
-  Christmas windows) with leakage tests. A weighted LightGBM matches the best
-  statistical baselines on RMSSE (0.712 against 0.709 for AutoETS) and cuts
-  pooled RMSE by about 3% (1.979 against 2.040), winning that measure in all
-  six folds. It loses clearly on the December 2014 fold. Details in
-  `docs/experiments.md` and `docs/decisions/`.
-- Prediction intervals: quantile LightGBM models give a 90th-percentile upper
-  bound for each forecast. Pinball loss is 4.6% lower than a simple
-  history-based bound over six folds, and 9.6% of outcomes exceed it (target
-  10%). For medium and slow series the lower end is zero, so it is a one-sided
-  bound. A separate fallback handles products with little history.
-- Nightly forecast generation: a Celery Beat schedule trains and forecasts
-  from each tenant's real, event-sourced `stock_movements` history (not the
-  static M5 sample), registers and versions every model via MLflow, and
-  writes the results to a `forecasts` table that keeps history rather than
-  overwriting it. Served through the API (`GET /products/{id}/forecast`,
-  `GET /forecasts/summary`), with an on-demand SHAP explanation endpoint
-  (`GET /products/{id}/forecast/{date}/explain`) showing which features
-  drove a given prediction. Details in
-  `docs/decisions/0009-nightly-forecast-generation.md`.
-- Alembic migrations, and a test suite that runs against a real Postgres.
-- CI on every push: lint, formatting, and tests with Postgres and Redis.
+**Multi-tenant API.** Each shop is a tenant, each user belongs to one.
+Registration and login use Argon2 password hashing and JWT access tokens.
+Roles (owner, staff) are enforced server-side, with 401 and 403 kept
+distinct. Tenant isolation is enforced in two independent layers: query
+filters in application code, and Postgres row-level security in the
+database itself. Tests prove that a forgotten filter in the code still
+cannot leak another tenant's data.
+
+**Background jobs.** CSV product import runs as a Celery task rather than
+inline in the request. Every row is validated individually, so bad rows
+are reported without blocking the good ones. Suppliers, costs, lead
+times, opening stock, and FOODS batch/expiry data are generated
+synthetically, since none of it exists in the underlying M5 sales data
+(see `docs/decisions/0007-synthetic-supply-data.md`). The API and worker
+run as separate Docker images, so ML libraries never ship inside the
+API's deployed container.
+
+**Live sales pipeline.** A Redis Streams consumer turns sales events into
+`stock_movements` rows, with idempotent processing (a redelivered event
+is never double-counted), bounded retries, and a dead-letter stream for
+events that keep failing. A replay script simulates a live point-of-sale
+feed from the M5 sample's historical sales; the current dev database has
+replayed 188,014 real events through this exact pipeline. Details in
+`docs/decisions/0008-redis-streams-consumer.md`.
+
+**Forecasting.** A rolling-origin backtest (six folds, 28-day horizon,
+spanning two Christmas seasons) with explicit leakage tests. A weighted
+LightGBM model matches the best statistical baseline on RMSSE (0.712
+against 0.709 for AutoETS) and cuts pooled RMSE by about 3% (1.979
+against 2.040), winning on that measure in all six folds, though it loses
+clearly on the December 2014 fold. Quantile LightGBM models give a
+90th-percentile upper bound per forecast: pinball loss is 4.6% lower than
+a simple history-based bound, and 9.6% of real outcomes exceed it against
+a 10% target. Full results in `docs/experiments.md` and `docs/decisions/`.
+
+**Nightly forecast generation.** A Celery Beat schedule retrains and
+forecasts from each tenant's real, event-sourced `stock_movements`
+history, not a static file, registers and versions every model through
+MLflow, and writes results to a `forecasts` table that keeps history
+rather than overwriting it. Served through the API
+(`GET /products/{id}/forecast`, `GET /forecasts/summary`), with an
+on-demand SHAP explanation endpoint
+(`GET /products/{id}/forecast/{date}/explain`) showing which features
+drove a given prediction. Details in
+`docs/decisions/0009-nightly-forecast-generation.md`.
+
+**Reorder recommendations and budget optimization.** A reorder point is
+computed directly from the calibrated 90th-percentile forecast, buffered
+for lead-time uncertainty, and rounded to each supplier's pack size and
+minimum order quantity (`GET /products/{id}/reorder`). When purchasing
+budget is limited, a 0/1 knapsack solved with OR-Tools chooses which
+products to fully reorder to maximize stockout-risk coverage within that
+budget (`GET /optimize-budget`). Details in
+`docs/decisions/0010-reorder-optimizer.md`.
+
+**Infrastructure.** Alembic migrations, a test suite that runs against a
+real Postgres and Redis rather than mocks, and CI on every push covering
+linting, formatting, and the full test suite.
 
 ## Quick start
 
-Requires Docker, [uv](https://docs.astral.sh/uv/) and Python 3.12.
+Requires Docker, [uv](https://docs.astral.sh/uv/), and Python 3.12.
 
 ```bash
 cp .env.example .env
@@ -118,8 +141,8 @@ Stockpilot uses a sample of the M5 (Walmart) dataset.
    and unzip it into `data/raw/m5/`.
 2. Run `uv run python scripts/prepare_m5.py`.
 
-To load the sample's products and synthetic supplier/cost/stock data into a
-tenant's database (after the tenant and its products exist):
+To load the sample's products and synthetic supplier/cost/stock data into
+a tenant's database, once the tenant and its products exist:
 
 ```bash
 uv run python -m scripts.synth.load_products
@@ -128,6 +151,8 @@ uv run python -m scripts.synth.seed
 
 ## Design decisions
 
-See [`docs/decisions/`](docs/decisions/) for short notes on the main technical
-choices and their trade-offs, and [`docs/experiments.md`](docs/experiments.md)
-for the forecasting experiment log.
+See [`docs/decisions/`](docs/decisions/) for short notes on the main
+technical choices and their trade-offs, including where the current data
+has known, stated limitations, and
+[`docs/experiments.md`](docs/experiments.md) for the full forecasting
+experiment log.
