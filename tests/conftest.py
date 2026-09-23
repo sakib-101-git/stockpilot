@@ -50,7 +50,7 @@ async def db_engine(migrated_db: None) -> AsyncIterator[AsyncEngine]:
         await conn.execute(
             text(
                 "TRUNCATE tenants, users, products, suppliers, product_suppliers, "
-                "stock_movements, batches, import_jobs, forecasts CASCADE"
+                "stock_movements, batches, import_jobs, forecasts, order_recommendations CASCADE"
             )
         )
     yield engine
