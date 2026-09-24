@@ -14,6 +14,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Forecast, Tenant
+from app.services.drift import check_drift
 from app.services.forecast_data import load_tenant_history
 from ml.features import calendar_features, training_table
 from ml.lgbm import fit
@@ -160,6 +161,23 @@ async def _run_nightly_forecasts_async(calendar_path: Path) -> dict[str, int]:
             tenants = (await session.execute(select(Tenant))).scalars().all()
 
         for tenant in tenants:
+            async with session_maker() as session:
+                await _set_tenant(session, tenant.id)
+                try:
+                    drift = await check_drift(session, tenant.id)
+                    if drift.is_significant:
+                        print(
+                            f"tenant {tenant.name}: DRIFT DETECTED "
+                            f"(share={drift.drift_share:.2f}, columns={drift.drifted_columns})"
+                        )
+                    else:
+                        print(
+                            f"tenant {tenant.name}: no significant drift "
+                            f"(share={drift.drift_share:.2f})"
+                        )
+                except ValueError as exc:
+                    print(f"tenant {tenant.name}: drift check skipped - {exc}")
+
             async with session_maker() as session:
                 try:
                     written = await generate_forecasts_for_tenant(session, tenant.id, calendar_path)
