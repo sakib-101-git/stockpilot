@@ -6,7 +6,7 @@ An AI-powered inventory and demand platform for small retailers: probabilistic
 demand forecasting, budget-constrained reorder recommendations, and an
 explainable assistant, built with Python and FastAPI.
 
-**Status:** under construction (Weeks 1-12 done; 13 next).
+**Status:** under construction (Weeks 1-13 done; 14 next).
 
 ## What it does
 
@@ -18,8 +18,9 @@ to approve, edit, or reject every suggested order before it's acted on, all
 from a working dashboard, with an AI assistant that can answer real
 questions about the data by calling the same tested backend directly.
 Every part of the pipeline is tenant-isolated, tested against a real
-Postgres and Redis, and built to be explainable rather than a black box —
-and its value is checked against a simple baseline, not just assumed.
+Postgres and Redis, monitored for drift rather than retrained blindly, and
+built to be explainable rather than a black box — and its value is checked
+against a simple baseline, not just assumed.
 
 ## What works so far
 
@@ -117,6 +118,15 @@ cannot approve, edit, or reject a real order. An eval suite checks
 grounding, hallucination resistance, and tenant isolation across multiple
 runs. Details in `docs/decisions/0013-ai-assistant.md`.
 
+**Drift detection.** Before the nightly job retrains, it checks whether a
+tenant's real demand features have actually shifted since a reference
+point using Evidently, and logs the result — which features drifted and
+by how much — rather than retraining blind every night with no signal
+either way. Verified against real data: a genuine, interpretable seasonal
+shift in the sample data was correctly detected and confirmed by hand
+against the underlying feature values, not just trusted at face value.
+Details in `docs/decisions/0014-drift-detection.md`.
+
 **Infrastructure.** Alembic migrations, a test suite that runs against a
 real Postgres and Redis rather than mocks, and CI on every push covering
 linting, formatting, and the full test suite.
@@ -151,7 +161,8 @@ To also run the background worker (needed for CSV import and forecasting):
 make worker
 ```
 
-To run the nightly forecast scheduler:
+To run the nightly forecast scheduler (now also checks and logs drift
+before each tenant's model retrains):
 
 ```bash
 uv run celery -A workers.celery_app beat --loglevel=info
