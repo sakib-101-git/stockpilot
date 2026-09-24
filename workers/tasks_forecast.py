@@ -149,9 +149,14 @@ async def generate_forecasts_for_tenant(
 
 
 async def _run_nightly_forecasts_async(calendar_path: Path) -> dict[str, int]:
+    import time
+
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
     from app.core.config import settings
+    from app.core.logging import get_logger, log_with_fields
+
+    logger = get_logger("stockpilot.nightly")
 
     engine = create_async_engine(settings.database_url, pool_pre_ping=True)
     results: dict[str, int] = {}
@@ -165,27 +170,53 @@ async def _run_nightly_forecasts_async(calendar_path: Path) -> dict[str, int]:
                 await _set_tenant(session, tenant.id)
                 try:
                     drift = await check_drift(session, tenant.id)
-                    if drift.is_significant:
-                        print(
-                            f"tenant {tenant.name}: DRIFT DETECTED "
-                            f"(share={drift.drift_share:.2f}, columns={drift.drifted_columns})"
-                        )
-                    else:
-                        print(
-                            f"tenant {tenant.name}: no significant drift "
-                            f"(share={drift.drift_share:.2f})"
-                        )
+                    log_with_fields(
+                        logger,
+                        30 if drift.is_significant else 20,  # WARNING if drifted, else INFO
+                        "drift check completed",
+                        tenant_id=str(tenant.id),
+                        tenant_name=tenant.name,
+                        drift_share=drift.drift_share,
+                        drifted_columns=drift.drifted_columns,
+                        is_significant=drift.is_significant,
+                    )
                 except ValueError as exc:
-                    print(f"tenant {tenant.name}: drift check skipped - {exc}")
+                    log_with_fields(
+                        logger,
+                        20,
+                        "drift check skipped",
+                        tenant_id=str(tenant.id),
+                        tenant_name=tenant.name,
+                        reason=str(exc),
+                    )
 
             async with session_maker() as session:
+                start = time.monotonic()
                 try:
                     written = await generate_forecasts_for_tenant(session, tenant.id, calendar_path)
+                    duration_ms = round((time.monotonic() - start) * 1000, 1)
                     results[str(tenant.id)] = written
-                    print(f"tenant {tenant.name}: wrote {written} forecast rows")
+                    log_with_fields(
+                        logger,
+                        20,
+                        "forecast generation succeeded",
+                        tenant_id=str(tenant.id),
+                        tenant_name=tenant.name,
+                        rows_written=written,
+                        duration_ms=duration_ms,
+                    )
                 except Exception as exc:
+                    duration_ms = round((time.monotonic() - start) * 1000, 1)
                     results[str(tenant.id)] = -1
-                    print(f"tenant {tenant.name}: FAILED - {exc}")
+                    log_with_fields(
+                        logger,
+                        40,  # ERROR
+                        "forecast generation failed",
+                        tenant_id=str(tenant.id),
+                        tenant_name=tenant.name,
+                        error=str(exc),
+                        duration_ms=duration_ms,
+                    )
     finally:
         await engine.dispose()
     return results
