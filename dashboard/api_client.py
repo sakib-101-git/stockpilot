@@ -80,3 +80,9 @@ def reject_recommendation(rec_id: str) -> dict:
     response = requests.post(f"{API_BASE}/recommendations/{rec_id}/reject", headers=_headers())
     response.raise_for_status()
     return response.json()
+
+
+def get_current_user() -> dict:
+    response = requests.get(f"{API_BASE}/auth/me", headers=_headers())
+    response.raise_for_status()
+    return response.json()

@@ -3,7 +3,7 @@ pages/ directory automatically.
 """
 
 import streamlit as st
-from api_client import login
+from api_client import get_current_user, login
 
 st.set_page_config(page_title="Stockpilot", layout="wide")
 
@@ -28,11 +28,14 @@ if st.session_state.token is None:
         else:
             st.session_state.token = result["access_token"]
             st.session_state.email = email
+            user_info = get_current_user()
+            st.session_state.tenant_id = user_info["tenant_id"]
             st.rerun()
 else:
     st.title("Stockpilot")
     st.write(f"Signed in as {st.session_state.email}")
-    st.write("Use the sidebar to navigate to Overview, Forecasts, or Recommendations.")
+    st.write("Use the sidebar to navigate to Overview, Forecasts, Recommendations, or Assistant.")
     if st.button("Sign out"):
         st.session_state.token = None
+        st.session_state.tenant_id = None
         st.rerun()
