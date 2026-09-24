@@ -6,7 +6,7 @@ An AI-powered inventory and demand platform for small retailers: probabilistic
 demand forecasting, budget-constrained reorder recommendations, and an
 explainable assistant, built with Python and FastAPI.
 
-**Status:** under construction (Weeks 1-11 done; 12 next).
+**Status:** under construction (Weeks 1-12 done; 13 next).
 
 ## What it does
 
@@ -15,10 +15,11 @@ product 28 days out with calibrated uncertainty, and turns those forecasts
 into concrete purchasing decisions: when to reorder, how much, and, when
 budget is limited, which products to prioritize. A human stays in the loop
 to approve, edit, or reject every suggested order before it's acted on, all
-from a working dashboard. Every part of the pipeline is tenant-isolated,
-tested against a real Postgres and Redis, and built to be explainable
-rather than a black box — and its value is checked against a simple
-baseline, not just assumed.
+from a working dashboard, with an AI assistant that can answer real
+questions about the data by calling the same tested backend directly.
+Every part of the pipeline is tenant-isolated, tested against a real
+Postgres and Redis, and built to be explainable rather than a black box —
+and its value is checked against a simple baseline, not just assumed.
 
 ## What works so far
 
@@ -105,6 +106,17 @@ endpoints described above — which keeps the door open to a different,
 more polished frontend later without touching the backend at all. Details
 in `docs/decisions/0012-streamlit-dashboard.md`.
 
+**AI assistant.** A chat page in the dashboard answers real questions
+about forecasts, reorder status, and purchasing recommendations by
+calling the same tested backend as tools, using Gemini's free tier — it
+never guesses a number it can look up. Tenant scoping is enforced by
+construction (every tool is bound to one tenant's ID, which the model
+never sees or controls), verified with a repeated isolation check rather
+than a single pass. Read-only by design: it can explain and recommend but
+cannot approve, edit, or reject a real order. An eval suite checks
+grounding, hallucination resistance, and tenant isolation across multiple
+runs. Details in `docs/decisions/0013-ai-assistant.md`.
+
 **Infrastructure.** Alembic migrations, a test suite that runs against a
 real Postgres and Redis rather than mocks, and CI on every push covering
 linting, formatting, and the full test suite.
@@ -116,6 +128,8 @@ Requires Docker, [uv](https://docs.astral.sh/uv/), and Python 3.12.
 ```bash
 cp .env.example .env
 # put a random value in JWT_SECRET_KEY, for example: openssl rand -hex 32
+# optionally add GEMINI_API_KEY for the AI assistant (free at
+# https://aistudio.google.com/apikey) — everything else works without it
 make up        # start Postgres (TimescaleDB) and Redis
 make migrate   # apply migrations (also creates the restricted app role)
 make run       # start the API on http://localhost:8000
@@ -123,11 +137,10 @@ make run       # start the API on http://localhost:8000
 
 Open http://localhost:8000/docs for the interactive API docs.
 
-To run the dashboard:
+To run the dashboard (run from the project root, not from inside `dashboard/`):
 
 ```bash
-cd dashboard
-uv run streamlit run app.py
+uv run streamlit run dashboard/Home.py
 ```
 
 Open http://localhost:8501 and sign in with an existing account.
@@ -173,6 +186,9 @@ docker compose exec db psql -U stockpilot -d stockpilot -c "CREATE DATABASE stoc
 make test
 ```
 
+Assistant tests make real Gemini API calls and are skipped automatically
+if `GEMINI_API_KEY` isn't set.
+
 ## Building the dataset
 
 Stockpilot uses a sample of the M5 (Walmart) dataset.
@@ -195,6 +211,14 @@ policy against the naive baseline (real historical data, takes roughly
 
 ```bash
 uv run python -m scripts.run_simulation
+```
+
+To run the assistant's eval suite (measures grounding, hallucination
+resistance, and tenant isolation over several real calls; requires
+`GEMINI_API_KEY`):
+
+```bash
+uv run python -m eval.run_eval
 ```
 
 ## Design decisions
