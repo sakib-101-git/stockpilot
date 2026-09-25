@@ -153,6 +153,7 @@ async def _run_nightly_forecasts_async(calendar_path: Path) -> dict[str, int]:
 
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+    from app.core import metrics
     from app.core.config import settings
     from app.core.logging import get_logger, log_with_fields
 
@@ -170,6 +171,7 @@ async def _run_nightly_forecasts_async(calendar_path: Path) -> dict[str, int]:
                 await _set_tenant(session, tenant.id)
                 try:
                     drift = await check_drift(session, tenant.id)
+                    metrics.drift_share.labels(tenant_id=str(tenant.id)).observe(drift.drift_share)
                     log_with_fields(
                         logger,
                         30 if drift.is_significant else 20,  # WARNING if drifted, else INFO
@@ -196,6 +198,9 @@ async def _run_nightly_forecasts_async(calendar_path: Path) -> dict[str, int]:
                     written = await generate_forecasts_for_tenant(session, tenant.id, calendar_path)
                     duration_ms = round((time.monotonic() - start) * 1000, 1)
                     results[str(tenant.id)] = written
+                    metrics.forecast_generation_seconds.labels(
+                        tenant_id=str(tenant.id), outcome="success"
+                    ).observe(duration_ms / 1000)
                     log_with_fields(
                         logger,
                         20,
@@ -208,6 +213,9 @@ async def _run_nightly_forecasts_async(calendar_path: Path) -> dict[str, int]:
                 except Exception as exc:
                     duration_ms = round((time.monotonic() - start) * 1000, 1)
                     results[str(tenant.id)] = -1
+                    metrics.forecast_generation_seconds.labels(
+                        tenant_id=str(tenant.id), outcome="failure"
+                    ).observe(duration_ms / 1000)
                     log_with_fields(
                         logger,
                         40,  # ERROR
