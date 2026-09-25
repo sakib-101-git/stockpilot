@@ -1,6 +1,7 @@
 import time
 
 from fastapi import FastAPI, Request
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from app.api import (
     auth,
@@ -26,6 +27,8 @@ configure_logging()
 logger = get_logger("stockpilot.http")
 
 app = FastAPI(title=settings.app_name)
+
+Instrumentator().instrument(app).expose(app, endpoint="/metrics")
 
 
 @app.middleware("http")
