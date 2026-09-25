@@ -1,12 +1,28 @@
 """Celery application. Background jobs run here, never inside an API request."""
 
+import os
+
 from celery import Celery
 from celery.schedules import crontab
+from prometheus_client import start_http_server
 
 from app.core.config import settings
 from app.core.logging import configure_logging
 
 configure_logging()
+
+# Exposes worker-side metrics (forecast generation, drift) on a separate
+# port from the API's own /metrics -- Celery has no built-in HTTP server,
+# so prometheus_client's own lightweight server fills that role here.
+# Gated behind an env var, not run unconditionally at import time: any
+# client-side script that merely dispatches a task via .delay() also
+# imports this module, and would otherwise try to bind this same port
+# and fail with "Address already in use" if a real worker (or another
+# such script) already holds it -- found by hitting exactly that error
+# when dispatching a task from the host while the real worker container
+# already had the port bound.
+if os.environ.get("STOCKPILOT_WORKER_PROCESS") == "1":
+    start_http_server(9101)
 
 celery_app = Celery(
     "stockpilot",
