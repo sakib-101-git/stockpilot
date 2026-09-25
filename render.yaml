@@ -1,0 +1,34 @@
+services:
+  - type: web
+    name: stockpilot-api
+    runtime: docker
+    dockerfilePath: ./docker/api.Dockerfile
+    dockerContext: .
+    plan: free
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: MIGRATION_DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: ADMIN_JOB_SECRET
+        sync: false
+      - key: INLINE_TASKS
+        value: "true"
+      - key: ENVIRONMENT
+        value: "production"
+
+  - type: web
+    name: stockpilot-dashboard
+    runtime: python
+    buildCommand: pip install uv && uv sync --frozen --no-dev
+    startCommand: uv run streamlit run dashboard/Home.py --server.port $PORT --server.address 0.0.0.0
+    plan: free
+    envVars:
+      - key: STOCKPILOT_API_URL
+        sync: false

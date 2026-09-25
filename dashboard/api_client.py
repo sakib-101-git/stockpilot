@@ -3,10 +3,12 @@ session state. No business logic lives here — every call maps directly to
 an existing, tested endpoint.
 """
 
+import os
+
 import requests
 import streamlit as st
 
-API_BASE = "http://localhost:8000"
+API_BASE = os.environ.get("STOCKPILOT_API_URL", "http://localhost:8000")
 
 
 def _headers() -> dict:
