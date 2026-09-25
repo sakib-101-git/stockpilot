@@ -6,7 +6,7 @@ An AI-powered inventory and demand platform for small retailers: probabilistic
 demand forecasting, budget-constrained reorder recommendations, and an
 explainable assistant, built with Python and FastAPI.
 
-**Status:** under construction (Weeks 1-13 done; 14 next).
+**Status:** under construction (Weeks 1-14 done; 15 next).
 
 ## What it does
 
@@ -38,8 +38,8 @@ are reported without blocking the good ones. Suppliers, costs, lead
 times, opening stock, and FOODS batch/expiry data are generated
 synthetically, since none of it exists in the underlying M5 sales data
 (see `docs/decisions/0007-synthetic-supply-data.md`). The API and worker
-run as separate Docker images, so ML libraries never ship inside the
-API's deployed container.
+run as separate Docker images, each with the specific native libraries
+and data files their code actually needs.
 
 **Live sales pipeline.** A Redis Streams consumer turns sales events into
 `stock_movements` rows, with idempotent processing (a redelivered event
@@ -127,9 +127,23 @@ shift in the sample data was correctly detected and confirmed by hand
 against the underlying feature values, not just trusted at face value.
 Details in `docs/decisions/0014-drift-detection.md`.
 
+**Monitoring and load testing.** Structured JSON logging with a
+per-request trace ID, Prometheus metrics (HTTP plus forecast generation
+time, drift share, and optimizer solve time) visualized in a Grafana
+dashboard, and a Locust load test against real concurrent traffic.
+Building this surfaced and fixed four real, previously invisible bugs in
+the Docker images themselves — the API and worker containers had never
+actually been proven to boot and run correctly end to end before. The
+load test found a genuine, unresolved hot spot: the budget optimizer
+degrades to multi-second latency under concurrent load despite the
+underlying solve itself measuring well under a second in isolation.
+Full details, including all four bugs and the load test numbers, in
+`docs/decisions/0015-monitoring-and-observability.md`.
+
 **Infrastructure.** Alembic migrations, a test suite that runs against a
 real Postgres and Redis rather than mocks, and CI on every push covering
-linting, formatting, and the full test suite.
+linting, formatting, the full test suite, and a Docker smoke test that
+builds and boots the real API image.
 
 ## Quick start
 
@@ -180,13 +194,23 @@ To replay the M5 sample as simulated live sales:
 uv run python -m scripts.synth.replay --limit 100
 ```
 
-To run the API and worker as Docker containers instead of locally:
+To run the full stack, including monitoring, as Docker containers:
 
 ```bash
-docker compose up -d api worker
+docker compose up -d api worker prometheus grafana
 ```
 
-The containerized API is served on http://localhost:8001.
+The containerized API is served on http://localhost:8001, Prometheus on
+http://localhost:9090, and Grafana (dashboard auto-provisioned) on
+http://localhost:3000 (login `admin` / `stockpilot`, or anonymous viewer
+access is enabled by default for local convenience — not something to
+carry into a real deployment).
+
+To run the load test against the running API:
+
+```bash
+uv run locust -f loadtest/locustfile.py --host http://localhost:8001 --headless -u 10 -r 2 -t 60s
+```
 
 ## Running the tests
 
