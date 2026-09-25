@@ -37,9 +37,16 @@ async def create_import(
     file_path = UPLOAD_DIR / f"{job.id}.csv"
     file_path.write_bytes(content)
 
-    from workers.tasks_import import run_product_import
+    from app.core.config import settings
 
-    run_product_import.delay(str(job.id), str(current_user.tenant_id), str(file_path))
+    if settings.inline_tasks:
+        from workers.tasks_import import _run_product_import_async
+
+        await _run_product_import_async(str(job.id), str(current_user.tenant_id), str(file_path))
+    else:
+        from workers.tasks_import import run_product_import
+
+        run_product_import.delay(str(job.id), str(current_user.tenant_id), str(file_path))
 
     await session.execute(
         text("SELECT set_config('app.current_tenant', :tenant_id, true)"),
