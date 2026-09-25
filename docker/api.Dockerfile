@@ -7,10 +7,11 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 COPY app ./app
 COPY workers ./workers
+COPY ml ./ml
 COPY migrations ./migrations
 COPY alembic.ini ./
 
-RUN uv sync --frozen --no-dev --no-group ml
+RUN uv sync --frozen --no-dev
 
 ENV PATH="/app/.venv/bin:$PATH"
 EXPOSE 8000
