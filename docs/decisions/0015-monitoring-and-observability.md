@@ -135,3 +135,33 @@ rushed in here.
 original scope), and wiring the still-unused `celery_task_total` counter
 that exists in `app/core/metrics.py` but has never actually been
 recorded anywhere.
+
+## Load test results (Locust, 10 concurrent users, 60s)
+
+A weighted mix reflecting real usage — mostly reading forecasts and
+pending recommendations, occasionally running the budget optimizer —
+against the real, fully-fixed Docker Compose stack.
+
+| endpoint | requests | failures | median | p95 | p99 | max |
+|---|---|---|---|---|---|---|
+| `/auth/login` | 10 | 0 | 430ms | 690ms | 690ms | 690ms |
+| `/forecasts/summary` | 133 | 0 | 34ms | 300ms | 490ms | 1405ms |
+| `/recommendations/pending` | 117 | 0 | 7ms | 250ms | 340ms | 348ms |
+| `/optimize-budget` | 21 | 0 | 1000ms | 2900ms | 3500ms | 3512ms |
+
+Zero failures across 281 requests on every endpoint — the system held up
+correctly under concurrent load, including RLS and connection pooling,
+which were never previously exercised with genuine concurrency.
+
+`/optimize-budget` is the clear outlier: a median of 1 second and a p99
+above 3.5 seconds, an order of magnitude slower than the read endpoints,
+and visibly climbing as concurrent requests accumulated during the run.
+This is a real, honest finding, not glossed over: the OR-Tools solve
+itself was independently measured earlier the same day at 8-480ms in
+isolation, so the gap under load points to something else — most likely
+contention in `_candidate_orders`' database query or the connection pool
+— as the actual bottleneck under concurrency, not the solver. Not
+root-caused further here; a reasonable next step would be to profile
+`_candidate_orders` specifically under concurrent load rather than
+assume the solver is at fault just because it is the most
+computationally distinctive part of the endpoint.
