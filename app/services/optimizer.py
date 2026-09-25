@@ -100,9 +100,16 @@ async def optimize_budget(
     model.Add(sum(c * v for c, v in zip(costs_cents, chosen, strict=True)) <= budget_cents)
     model.Maximize(sum(p * v for p, v in zip(priorities_scaled, chosen, strict=True)))
 
-    solver = cp_model.CpSolver()
-    status = solver.Solve(model)
+    import time
 
+    from app.core import metrics
+
+    solver = cp_model.CpSolver()
+    solve_start = time.monotonic()
+    status = solver.Solve(model)
+    metrics.optimizer_solve_seconds.labels(tenant_id=str(tenant_id)).observe(
+        time.monotonic() - solve_start
+    )
     orders: list[OptimizedOrder] = []
     skipped: list[uuid.UUID] = []
     total_cost = 0.0
