@@ -1,3 +1,4 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,20 +14,35 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     gemini_api_key: str = ""
-
-    # When true (set in production, where no separate Celery worker
-    # process runs), background work — CSV import, the nightly forecast
-    # job — executes inline within the request/admin-call itself,
-    # reusing the exact same async functions Celery normally dispatches
-    # to, rather than duplicating the logic. False locally, where a real
-    # worker container is available via docker compose.
     inline_tasks: bool = False
-
-    # Shared secret for the admin-only nightly job trigger endpoint,
-    # called by a scheduled GitHub Actions workflow in production. Not
-    # a real user's JWT — this endpoint runs across every tenant and
-    # must only be callable by that one trusted automated caller.
     admin_job_secret: str = ""
+
+    @field_validator("database_url", "migration_database_url")
+    @classmethod
+    def _translate_neon_ssl_params(cls, value: str | None) -> str | None:
+        """Neon's connection strings carry ?sslmode=require&channel_binding=require,
+        which asyncpg rejects outright as unrecognized keyword arguments — a
+        real, documented failure mode, not a hypothetical one. asyncpg's
+        SQLAlchemy dialect recognizes a plain ssl= query parameter instead,
+        so sslmode is translated to it and channel_binding is dropped
+        (asyncpg has no equivalent; TLS itself is still required either
+        way, so this does not weaken the actual connection security).
+        """
+        if value is None:
+            return value
+        if "sslmode=" not in value:
+            return value
+
+        from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+
+        parsed = urlparse(value)
+        params = parse_qs(parsed.query)
+        sslmode = params.pop("sslmode", [None])[0]
+        params.pop("channel_binding", None)
+        if sslmode:
+            params["ssl"] = [sslmode]
+        new_query = urlencode(params, doseq=True)
+        return urlunparse(parsed._replace(query=new_query))
 
 
 settings = Settings()
