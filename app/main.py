@@ -4,6 +4,7 @@ from fastapi import FastAPI, Request
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from app.api import (
+    admin,
     auth,
     forecasts,
     health,
@@ -64,3 +65,4 @@ app.include_router(imports.router)
 app.include_router(forecasts.router)
 app.include_router(reorder.router)
 app.include_router(order_recommendations.router)
+app.include_router(admin.router)
