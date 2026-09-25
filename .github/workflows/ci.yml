@@ -45,3 +45,30 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run pytest -q
+
+  docker-smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build API image
+        run: docker build -f docker/api.Dockerfile -t stockpilot-api-smoke .
+      - name: Run API container and check /health
+        run: |
+          docker run -d --name api-smoke \
+            -e DATABASE_URL=postgresql+asyncpg://stockpilot_app:stockpilot_app@localhost:5432/stockpilot_test \
+            -e MIGRATION_DATABASE_URL=postgresql+asyncpg://stockpilot:stockpilot@localhost:5432/stockpilot_test \
+            -e REDIS_URL=redis://localhost:6379/0 \
+            -e JWT_SECRET_KEY=ci-smoke-test-secret-key-that-is-long-enough \
+            -p 8000:8000 \
+            stockpilot-api-smoke
+          for i in $(seq 1 15); do
+            if curl -sf http://localhost:8000/health; then
+              echo "API responded successfully"
+              exit 0
+            fi
+            echo "waiting for API to respond (attempt $i)..."
+            sleep 2
+          done
+          echo "API did not respond after 30s"
+          docker logs api-smoke
+          exit 1
